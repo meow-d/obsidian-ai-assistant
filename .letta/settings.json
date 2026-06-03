@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(pnpm install:*)",
-      "Bash(node esbuild.config.mjs production 2)"
-    ]
-  }
-}

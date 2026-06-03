@@ -1,0 +1,11 @@
+{
+  "id": "fyp-plugin",
+  "name": "Wikilink AI Assistant",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "AI-powered wikilink suggestions, semantic search, and note organisation.",
+  "author": "meow_d",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}

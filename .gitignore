@@ -1,0 +1,4 @@
+node_modules/
+main.js
+sql-wasm-browser.wasm
+sql-wasm.wasm

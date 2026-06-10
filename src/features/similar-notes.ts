@@ -16,6 +16,7 @@ interface ResurfaceResult {
   score: number;
   similarity: number;
   daysSince: number;
+  preview: string;
 }
 
 function resurfaceScore(similarity: number, daysSince: number): number {
@@ -29,6 +30,7 @@ export class SimilarNotesView extends ItemView {
   private minSimilarity: number;
   private refreshInterval: number | null = null;
   private plugin: FypPlugin;
+  private generation = 0;
   private splitCache = new Map<string, { result: SplitAnalysis | null; timestamp: number }>();
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, minSimilarity: number, plugin: FypPlugin) {
@@ -69,21 +71,26 @@ export class SimilarNotesView extends ItemView {
   }
 
   async refresh(): Promise<void> {
+    const gen = ++this.generation;
     const activeFile = this.app.workspace.getActiveFile();
     const container = this.containerEl.children[1] as HTMLElement;
-    const switcherEl = container.querySelector(".fyp-sidebar-switcher");
 
-    container.empty();
-    if (switcherEl) container.appendChild(switcherEl);
+    const render = (body: () => void) => {
+      if (gen !== this.generation) return;
+      const switcherEl = container.querySelector(".fyp-sidebar-switcher");
+      container.empty();
+      if (switcherEl) container.appendChild(switcherEl);
+      body();
+    };
 
     if (!activeFile) {
-      container.createEl("p", { text: "No note open." });
+      render(() => container.createEl("p", { text: "No note open." }));
       return;
     }
 
     const emb = await this.index.getEmbedding(activeFile.path);
     if (!emb) {
-      container.createEl("p", { text: "Note not yet indexed." });
+      render(() => container.createEl("p", { text: "Note not yet indexed." }));
       return;
     }
 
@@ -91,21 +98,23 @@ export class SimilarNotesView extends ItemView {
     const tags = await computeTagSuggestions(this.app, this.index, activeFile, 10);
     const folders = await computeFolderSuggestions(this.app, this.index, activeFile);
     const resurfaceResults = await this.checkResurfacing(emb, activeFile);
+    const split = await this.checkSplit(activeFile);
 
-    await this.checkAndRenderSplit(container, activeFile);
-    await this.renderSimilarNotes(container, results)
-    await this.renderResurfacing(container, resurfaceResults);
-    await this.renderTagSuggestions(container, tags);
-    await this.renderFolderSuggestions(container, folders);
+    render(() => {
+      this.renderSplit(container, activeFile, split);
+      this.renderSimilarNotes(container, results);
+      this.renderResurfacing(container, resurfaceResults);
+      this.renderTagSuggestions(container, tags);
+      this.renderFolderSuggestions(container, folders);
 
-    const hasContent = results.length > 0 || tags.length > 0 || folders.length > 0 || resurfaceResults.length > 0;
-
-    if (!hasContent) {
-      container.createEl("p", { text: "No suggestions available for this note." });
-    }
+      const hasContent = results.length > 0 || tags.length > 0 || folders.length > 0 || resurfaceResults.length > 0;
+      if (!hasContent) {
+        container.createEl("p", { text: "No suggestions available for this note." });
+      }
+    });
   }
 
-  private async renderSimilarNotes(container: HTMLElement, results: SearchResult[]): Promise<void> {
+  private renderSimilarNotes(container: HTMLElement, results: SearchResult[]): void {
     if (results.length == 0) return;
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Similar notes" });
@@ -119,18 +128,19 @@ export class SimilarNotesView extends ItemView {
     }
   }
 
-  private async checkAndRenderSplit(container: HTMLElement, file: TFile): Promise<void> {
+  private async checkSplit(file: TFile): Promise<SplitAnalysis | null> {
     const cached = this.splitCache.get(file.path);
     const stale = !cached || Date.now() - cached.timestamp > SPLIT_CHECK_INTERVAL_MS;
 
-    let analysis: SplitAnalysis | null = cached?.result ?? null;
+    if (!stale) return cached?.result ?? null;
 
-    if (stale) {
-      const text = await this.app.vault.cachedRead(file);
-      analysis = await analyseSplit(text);
-      this.splitCache.set(file.path, { result: analysis, timestamp: Date.now() });
-    }
+    const text = await this.app.vault.cachedRead(file);
+    const analysis = await analyseSplit(text);
+    this.splitCache.set(file.path, { result: analysis, timestamp: Date.now() });
+    return analysis;
+  }
 
+  private renderSplit(container: HTMLElement, file: TFile, analysis: SplitAnalysis | null): void {
     if (!analysis) return;
 
     const banner = container.createEl("div", { cls: "fyp-split-banner" });
@@ -141,7 +151,7 @@ export class SimilarNotesView extends ItemView {
     });
   }
 
-  private async renderTagSuggestions(container: HTMLElement, tags: Array<{ tag: string; score: number }>): Promise<void> {
+  private renderTagSuggestions(container: HTMLElement, tags: Array<{ tag: string; score: number }>): void {
     if (tags.length === 0) return;
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Tag suggestions" });
@@ -153,7 +163,7 @@ export class SimilarNotesView extends ItemView {
     }
   }
 
-  private async renderFolderSuggestions(container: HTMLElement, folders: Array<{ folder: TFolder; score: number }>): Promise<void> {
+  private renderFolderSuggestions(container: HTMLElement, folders: Array<{ folder: TFolder; score: number }>): void {
     if (folders.length === 0) return;
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Folder suggestions" });
@@ -189,7 +199,7 @@ export class SimilarNotesView extends ItemView {
       const score = resurfaceScore(similarity, daysSince);
 
       if (score >= 0.5) {
-        resurfaceResults.push({ file, score, similarity, daysSince: Math.round(daysSince) });
+        resurfaceResults.push({ file, score, similarity, daysSince: Math.round(daysSince), preview: note.preview });
       }
     }
 
@@ -197,7 +207,7 @@ export class SimilarNotesView extends ItemView {
     return resurfaceResults.slice(0, 3);
   }
 
-  private async renderResurfacing(container: HTMLElement, resurfaceResults: ResurfaceResult[]): Promise<void> {
+  private renderResurfacing(container: HTMLElement, resurfaceResults: ResurfaceResult[]): void {
     if (resurfaceResults.length === 0) return;
 
     container.createEl("h3", { cls: "fyp-header", text: "Try revisiting..." });
@@ -210,8 +220,7 @@ export class SimilarNotesView extends ItemView {
         cls: "fyp-similar-score",
         text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,
       });
-      const note = await this.index.getNote(r.file.path);
-      if (note) item.createEl("p", { cls: "fyp-similar-preview", text: note.preview.slice(0, 120) });
+      item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }
 }

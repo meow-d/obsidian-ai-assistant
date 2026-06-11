@@ -306,6 +306,8 @@ export class AgentView extends ItemView {
     const loadingEl = contentEl.createEl("span", { cls: "fyp-loading-dots" });
     let fullResponse = "";
 
+    const stream = this.makeStreamingRenderer(contentEl);
+
     try {
       const tools = makeToolHandlers(this.index, this.appRef);
       const returnedMsgs = await runAgentLoop(
@@ -315,15 +317,13 @@ export class AgentView extends ItemView {
         (chunk) => {
           if (loadingEl.parentNode) loadingEl.remove();
           fullResponse += chunk;
-          contentEl.setText(fullResponse);
-          this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+          stream.schedule(fullResponse);
         },
         (status) => { this.statusEl.setText(status); },
       );
       this.statusEl.setText("");
 
-      contentEl.empty();
-      await MarkdownRenderer.render(this.app, fullResponse, contentEl, "", this);
+      await stream.flush(fullResponse);
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 
       const newMsgs = returnedMsgs.slice(sendHistory.length);
@@ -344,6 +344,47 @@ export class AgentView extends ItemView {
     this.inputEl.disabled = false;
     this.inputEl.focus();
     this.presetsEl.style.display = "";
+  }
+
+  private async renderMarkdown(el: HTMLElement, text: string): Promise<void> {
+    el.empty();
+    await MarkdownRenderer.render(this.app, text, el, "", this);
+  }
+
+  /**
+   * Throttled markdown renderer for streaming text. Re-renders at most every
+   * ~80ms and never overlaps two async renders, so partial markdown still shows
+   * newlines and formatting as it arrives instead of one flat line.
+   */
+  private makeStreamingRenderer(el: HTMLElement, intervalMs = 80) {
+    let latest = "";
+    let dirty = false;
+    let rendering = false;
+    let timer: number | null = null;
+
+    const pump = async () => {
+      if (rendering) { dirty = true; return; }
+      rendering = true;
+      do {
+        dirty = false;
+        await this.renderMarkdown(el, latest);
+        this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+      } while (dirty);
+      rendering = false;
+    };
+
+    return {
+      schedule: (text: string) => {
+        latest = text;
+        if (timer != null) return;
+        timer = window.setTimeout(() => { timer = null; void pump(); }, intervalMs);
+      },
+      flush: async (text: string) => {
+        latest = text;
+        if (timer != null) { window.clearTimeout(timer); timer = null; }
+        await pump();
+      },
+    };
   }
 
   private appendMessageEl(role: "user" | "assistant", text: string): HTMLElement {

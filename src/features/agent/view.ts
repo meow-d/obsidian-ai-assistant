@@ -250,14 +250,9 @@ export class AgentView extends ItemView {
 
   private async newConversation(): Promise<void> {
     if (this.showingHistory) this.closeHistory();
-    const created = await this.store.newConversation();
-    if (!created) {
-      this.messagesEl.empty();
-      this.statusEl.setText("");
-      return;
-    }
-    this.messagesEl.empty();
+    await this.store.newConversation();
     this.statusEl.setText("");
+    await this.renderCurrentConversation();
   }
 
   async runCompaction(): Promise<void> {

@@ -64,6 +64,9 @@ export class SimilarNotesView extends ItemView {
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => this.refresh())
     );
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => this.refresh())
+    );
   }
 
   async onClose(): Promise<void> {

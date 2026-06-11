@@ -10,6 +10,12 @@ export interface IndexedNote {
   preview: string;
 }
 
+/** A single chunk of a note: its embedding and a short preview of its text. */
+export interface NoteChunk {
+  embedding: number[];
+  preview: string;
+}
+
 export interface SearchResult {
   file: TFile;
   score: number;
@@ -19,21 +25,31 @@ export interface SearchResult {
 // Matches [[target]], [[target|alias]], [[target#heading|alias]], [[target^block]]
 const WL_RE = /\[\[([^\[\]|#^]+?)(?:[#^][^\[\]|]*)?(?:\|([^\[\]]*))?\]\]/g;
 
+// Mirrors preprocessing/preprocessor/pipeline.py.
+export const MAX_WORDS = 350;
+const SECTION_RE = /(?=^#{2,3} )/m;
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
 /**
  * Mirror of the Python pipeline's clean_frontmatter + resolve_wikilinks steps.
+ * Returns both the rebuilt frontmatter block (used as a per-chunk prefix) and
+ * the full prepared text (frontmatter + normalised body).
  *
  * - Strips the original frontmatter and rebuilds it with title, tags, aliases only.
  * - Replaces [[wikilinks]] with their display text; when resolveWikilink is provided,
  *   broken links (resolver returns null) are dropped (→ "") matching Python behaviour.
  * - H1 headings are left in place (Python does not strip them).
  */
-export function prepareNoteText(
+function prepareNote(
   raw: string,
   title?: string,
   tags: string[] = [],
   aliases: string[] = [],
   resolveWikilink?: (target: string) => string | null,
-): string {
+): { fmBlock: string; prepared: string } {
   // Strip original frontmatter
   const FM_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
   const fmMatch = FM_RE.exec(raw);
@@ -59,7 +75,42 @@ export function prepareNoteText(
     return display;
   });
 
-  return fmBlock + normalised;
+  return { fmBlock, prepared: fmBlock + normalised };
+}
+
+export function prepareNoteText(
+  raw: string,
+  title?: string,
+  tags: string[] = [],
+  aliases: string[] = [],
+  resolveWikilink?: (target: string) => string | null,
+): string {
+  return prepareNote(raw, title, tags, aliases, resolveWikilink).prepared;
+}
+
+/**
+ * Split prepared text into chunks, mirroring the Python pipeline's _split_sections.
+ *
+ * Notes shorter than MAX_WORDS are kept whole. Longer notes are split before each
+ * ## / ### heading; the frontmatter block is prepended to every chunk that does
+ * not already start with it, so each chunk carries the note's title and metadata.
+ */
+export function splitIntoChunks(prepared: string, fmBlock: string): string[] {
+  if (wordCount(prepared) <= MAX_WORDS) return [prepared];
+  const parts = prepared.split(SECTION_RE).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return [prepared];
+  return parts.map((p) => (p.startsWith("---") ? p : fmBlock + p));
+}
+
+export function prepareNoteChunks(
+  raw: string,
+  title?: string,
+  tags: string[] = [],
+  aliases: string[] = [],
+  resolveWikilink?: (target: string) => string | null,
+): string[] {
+  const { fmBlock, prepared } = prepareNote(raw, title, tags, aliases, resolveWikilink);
+  return splitIntoChunks(prepared, fmBlock);
 }
 
 function extractPreviewText(prepared: string): string {
@@ -118,6 +169,7 @@ export class VaultIndex {
 
     if (filesToIndex.length > 0) {
       log(`[index] indexing ${filesToIndex.length} new/modified files`);
+      onProgress?.(this.pathCache.size, files.length);
       await this.indexFiles(filesToIndex, () => {
         // Report progress relative to total files
         onProgress?.(this.pathCache.size, files.length);
@@ -140,20 +192,22 @@ export class VaultIndex {
       const batch = files.slice(i, i + BATCH);
       const t0 = performance.now();
       const raws = await Promise.all(batch.map((f) => this.app.vault.cachedRead(f)));
-      const texts = raws.map((raw, j) => this.prepareText(batch[j], raw));
+      const perFileChunks = raws.map((raw, j) => this.prepareChunks(batch[j], raw));
+      const flatTexts = perFileChunks.flat();
       const readMs = performance.now() - t0;
-      const embeddings = await embed(texts);
+      const embeddings = await embed(flatTexts);
       const totalMs = performance.now() - t0;
-      log(`[index] batch ${batchNum}/${totalBatches}: ${batch.length} files, read=${readMs.toFixed(0)}ms, total=${totalMs.toFixed(0)}ms`);
+      log(`[index] batch ${batchNum}/${totalBatches}: ${batch.length} files, ${flatTexts.length} chunks, read=${readMs.toFixed(0)}ms, total=${totalMs.toFixed(0)}ms`);
+      let offset = 0;
       for (let j = 0; j < batch.length; j++) {
         const f = batch[j];
-        const note: IndexedNote = {
-          path: f.path,
-          mtime: f.stat.mtime,
-          embedding: embeddings[j],
-          preview: extractPreviewText(texts[j]),
-        };
-        await this.cacheManager?.updateNote(f.path, note);
+        const chunkTexts = perFileChunks[j];
+        const chunks: NoteChunk[] = chunkTexts.map((text, c) => ({
+          embedding: embeddings[offset + c],
+          preview: extractPreviewText(text),
+        }));
+        offset += chunkTexts.length;
+        await this.cacheManager?.updateNote(f.path, f.stat.mtime, chunks);
         this.pathCache.add(f.path);
         indexed++;
         onProgress?.(indexed, files.length);
@@ -162,13 +216,13 @@ export class VaultIndex {
     }
   }
 
-  private prepareText(file: TFile, raw: string): string {
+  private prepareChunks(file: TFile, raw: string): string[] {
     const cache = this.app.metadataCache.getFileCache(file);
     const tags = (cache?.tags ?? []).map((t) => t.tag.replace(/^#/, ""));
     const aliases: string[] = Array.isArray(cache?.frontmatter?.aliases)
       ? cache.frontmatter.aliases
       : cache?.frontmatter?.aliases ? [cache.frontmatter.aliases] : [];
-    return prepareNoteText(raw, file.basename, tags, aliases, (target) => {
+    return prepareNoteChunks(raw, file.basename, tags, aliases, (target) => {
       const dest = this.app.metadataCache.getFirstLinkpathDest(target, file.path);
       return dest ? dest.path : null;
     });
@@ -192,15 +246,13 @@ export class VaultIndex {
     const t0 = performance.now();
     log(`[index] updateFile (${isNew ? "new" : "changed"}): "${file.path}"`);
     const raw = await this.app.vault.cachedRead(file);
-    const text = this.prepareText(file, raw);
-    const [emb] = await embed([text]);
-    const note: IndexedNote = {
-      path: file.path,
-      mtime: file.stat.mtime,
-      embedding: emb,
+    const chunkTexts = this.prepareChunks(file, raw);
+    const embeddings = await embed(chunkTexts);
+    const chunks: NoteChunk[] = chunkTexts.map((text, c) => ({
+      embedding: embeddings[c],
       preview: extractPreviewText(text),
-    };
-    await this.cacheManager?.updateNote(file.path, note);
+    }));
+    await this.cacheManager?.updateNote(file.path, file.stat.mtime, chunks);
     await this.cacheManager?.flush();
     this.pathCache.add(file.path);
     const cache = this.app.metadataCache.getFileCache(file);

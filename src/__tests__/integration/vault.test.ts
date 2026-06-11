@@ -472,7 +472,7 @@ describe("cache persistence", () => {
       const mgr1 = new CacheManager(altApp as any, PLUGIN_DIR);
       const { embed } = await import("../../core/embedder");
       const [emb] = await embed(["test"]);
-      await mgr1.updateNote("a.md", { path: "a.md", mtime: 1, embedding: emb, preview: "p" });
+      await mgr1.updateNote("a.md", 1, [{ embedding: emb, preview: "p" }]);
       await mgr1.saveModelPath("model-a");
       const mgr2 = new CacheManager(altApp as any, PLUGIN_DIR);
       const result = await mgr2.load("model-b");

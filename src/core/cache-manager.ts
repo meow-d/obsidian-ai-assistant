@@ -1,11 +1,34 @@
 import initSqlJs from "sql.js";
 import { App, normalizePath } from "obsidian";
-import type { IndexedNote } from "./vault-index";
+import type { IndexedNote, NoteChunk } from "./vault-index";
 import { cosine } from "./embedder";
 import { log, warn, error } from "./log";
 
 const CACHE_FOLDER = ".fyp-cache";
 const DB_FILE = "embeddings.db";
+
+/**
+ * Collapse a note's per-chunk embeddings into a single note-level vector.
+ * Chunk embeddings are unit-normalised by the model, so a single-chunk note is
+ * returned unchanged; multi-chunk notes get the L2-normalised mean (centroid),
+ * keeping the result a unit vector for the dot-product cosine.
+ */
+function meanPool(embeddings: number[][]): number[] {
+  if (embeddings.length === 1) return embeddings[0];
+  const dim = embeddings[0]?.length ?? 0;
+  const centroid = new Array(dim).fill(0);
+  for (const emb of embeddings) {
+    for (let d = 0; d < dim; d++) centroid[d] += emb[d];
+  }
+  let norm = 0;
+  for (let d = 0; d < dim; d++) {
+    centroid[d] /= embeddings.length;
+    norm += centroid[d] * centroid[d];
+  }
+  norm = Math.sqrt(norm) || 1;
+  for (let d = 0; d < dim; d++) centroid[d] /= norm;
+  return centroid;
+}
 
 export class CacheManager {
   private app: App;
@@ -80,12 +103,29 @@ export class CacheManager {
   private initializeSchema(): void {
     const db = this.db!;
 
+    // Migrate pre-chunking caches: the old schema keyed embeddings on path alone
+    // (one vector per note). Drop it so the vault is re-indexed into chunk rows.
+    try {
+      const info = db.exec("PRAGMA table_info(embeddings)");
+      if (info.length > 0) {
+        const cols = info[0].values.map((row: unknown[]) => row[1]);
+        if (!cols.includes("chunk_idx")) {
+          log("[cache] migrating: dropping pre-chunking embeddings table");
+          db.run("DROP TABLE embeddings");
+        }
+      }
+    } catch (e) {
+      warn("[cache] schema migration check failed:", e);
+    }
+
     db.run(`
       CREATE TABLE IF NOT EXISTS embeddings (
-        path TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        chunk_idx INTEGER NOT NULL,
         mtime INTEGER NOT NULL,
         embedding BLOB NOT NULL,
-        preview TEXT NOT NULL
+        preview TEXT NOT NULL,
+        PRIMARY KEY (path, chunk_idx)
       );
 
       CREATE TABLE IF NOT EXISTS metadata (
@@ -93,6 +133,7 @@ export class CacheManager {
         value TEXT NOT NULL
       );
 
+      CREATE INDEX IF NOT EXISTS idx_embeddings_path ON embeddings(path);
       CREATE INDEX IF NOT EXISTS idx_embeddings_mtime ON embeddings(mtime);
     `);
   }
@@ -157,10 +198,11 @@ export class CacheManager {
           if (count < 3 || count % 100 === 0) {
             log(`[cache] save: inserting note ${count + 1}/${notes.size}: "${path}" (embedding length: ${note.embedding.length}, buffer: ${embeddingBuffer.byteLength} bytes)`);
           }
+          db.run("DELETE FROM embeddings WHERE path = ?", [path]);
           db.run(
-            `INSERT OR REPLACE INTO embeddings (path, mtime, embedding, preview)
-             VALUES (?, ?, ?, ?)`,
-            [path, note.mtime, embeddingBuffer, note.preview]
+            `INSERT OR REPLACE INTO embeddings (path, chunk_idx, mtime, embedding, preview)
+             VALUES (?, ?, ?, ?, ?)`,
+            [path, 0, note.mtime, embeddingBuffer, note.preview]
           );
           count++;
         } catch (e) {
@@ -208,22 +250,22 @@ export class CacheManager {
       }
 
       log(`[cache] load: preparing embeddings query`);
-      const stmt = db.prepare("SELECT path, mtime, embedding, preview FROM embeddings");
-      const notes = new Map<string, IndexedNote>();
+      const stmt = db.prepare(
+        "SELECT path, chunk_idx, mtime, embedding, preview FROM embeddings ORDER BY path, chunk_idx"
+      );
+      const grouped = new Map<string, { mtime: number; preview: string; embs: number[][] }>();
       let rowCount = 0;
       while (stmt.step()) {
         try {
           const row = stmt.getAsObject();
-          const embedding = row.embedding as Uint8Array;
-          if (rowCount < 3) {
-            log(`[cache] load: row ${rowCount + 1}: path="${row.path}", embedding type=${typeof embedding}, length=${(embedding as any)?.length}`);
+          const path = row.path as string;
+          let g = grouped.get(path);
+          if (!g) {
+            g = { mtime: row.mtime as number, preview: "", embs: [] };
+            grouped.set(path, g);
           }
-          notes.set(row.path as string, {
-            path: row.path as string,
-            mtime: row.mtime as number,
-            embedding: this.decodeEmbedding(embedding),
-            preview: row.preview as string,
-          });
+          if ((row.chunk_idx as number) === 0) g.preview = row.preview as string;
+          g.embs.push(this.decodeEmbedding(row.embedding as Uint8Array));
           rowCount++;
         } catch (e) {
           error(`[cache] load: failed to decode row ${rowCount}:`, e);
@@ -232,7 +274,12 @@ export class CacheManager {
       }
       stmt.free();
 
-      log(`[cache] loaded ${notes.size} embeddings from SQLite (processed ${rowCount} rows)`);
+      const notes = new Map<string, IndexedNote>();
+      for (const [path, g] of grouped) {
+        notes.set(path, { path, mtime: g.mtime, embedding: meanPool(g.embs), preview: g.preview });
+      }
+
+      log(`[cache] loaded ${notes.size} notes from SQLite (processed ${rowCount} chunk rows)`);
       return notes;
     } catch (e) {
       log(`[cache] no valid cache found:`, e instanceof Error ? e.message : "unknown error");
@@ -246,7 +293,7 @@ export class CacheManager {
       log(`[cache] queryByEmbedding: query embedding length=${embedding.length}, k=${k}, excludePath="${excludePath}"`);
       const db = await this.getDb();
       const stmt = db.prepare("SELECT path, embedding, preview FROM embeddings");
-      const results: Array<{ path: string; score: number; preview: string }> = [];
+      const best = new Map<string, { score: number; preview: string }>();
 
       let rowCount = 0;
       while (stmt.step()) {
@@ -256,7 +303,10 @@ export class CacheManager {
           if (path === excludePath) continue;
           const emb = this.decodeEmbedding(row.embedding as Uint8Array);
           const score = cosine(embedding, emb);
-          results.push({ path, score, preview: row.preview as string });
+          const current = best.get(path);
+          if (!current || score > current.score) {
+            best.set(path, { score, preview: row.preview as string });
+          }
           rowCount++;
         } catch (e) {
           error(`[cache] queryByEmbedding: failed to process row:`, e);
@@ -265,9 +315,10 @@ export class CacheManager {
       }
       stmt.free();
 
+      const results = Array.from(best, ([path, v]) => ({ path, score: v.score, preview: v.preview }));
       results.sort((a, b) => b.score - a.score);
       const topK = results.slice(0, k);
-      log(`[cache] queryByEmbedding: processed ${rowCount} rows, returning top ${topK.length}`);
+      log(`[cache] queryByEmbedding: processed ${rowCount} chunk rows, returning top ${topK.length}`);
       return topK;
     } catch (e) {
       error("[cache] queryByEmbedding failed:", e);
@@ -279,39 +330,45 @@ export class CacheManager {
     try {
       log(`[cache] getNote: path="${path}"`);
       const db = await this.getDb();
-      const stmt = db.prepare("SELECT path, mtime, embedding, preview FROM embeddings WHERE path = ?");
+      const stmt = db.prepare(
+        "SELECT chunk_idx, mtime, embedding, preview FROM embeddings WHERE path = ? ORDER BY chunk_idx"
+      );
       stmt.bind([path]);
-      if (!stmt.step()) {
-        log(`[cache] getNote: note not found`);
-        stmt.free();
-        return null;
+      const embs: number[][] = [];
+      let mtime = 0;
+      let preview = "";
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        mtime = row.mtime as number;
+        if ((row.chunk_idx as number) === 0) preview = row.preview as string;
+        embs.push(this.decodeEmbedding(row.embedding as Uint8Array));
       }
-      const row = stmt.getAsObject();
-      log(`[cache] getNote: found, embedding length=${(row.embedding as any)?.length}`);
       stmt.free();
 
-      return {
-        path: row.path as string,
-        mtime: row.mtime as number,
-        embedding: this.decodeEmbedding(row.embedding as Uint8Array),
-        preview: row.preview as string,
-      };
+      if (embs.length === 0) {
+        log(`[cache] getNote: note not found`);
+        return null;
+      }
+      log(`[cache] getNote: found ${embs.length} chunk(s)`);
+      return { path, mtime, embedding: meanPool(embs), preview };
     } catch (e) {
       error("[cache] getNote failed:", e);
       return null;
     }
   }
 
-  async updateNote(path: string, note: IndexedNote): Promise<void> {
+  async updateNote(path: string, mtime: number, chunks: NoteChunk[]): Promise<void> {
     try {
       const db = await this.getDb();
-      const embeddingBuffer = this.encodeEmbedding(note.embedding);
-      log(`[cache] updateNote: path="${path}", embedding length=${note.embedding.length}, buffer=${embeddingBuffer.byteLength} bytes`);
-      db.run(
-        `INSERT OR REPLACE INTO embeddings (path, mtime, embedding, preview)
-         VALUES (?, ?, ?, ?)`,
-        [path, note.mtime, embeddingBuffer, note.preview]
-      );
+      log(`[cache] updateNote: path="${path}", ${chunks.length} chunk(s)`);
+      db.run("DELETE FROM embeddings WHERE path = ?", [path]);
+      chunks.forEach((chunk, idx) => {
+        db.run(
+          `INSERT OR REPLACE INTO embeddings (path, chunk_idx, mtime, embedding, preview)
+           VALUES (?, ?, ?, ?, ?)`,
+          [path, idx, mtime, this.encodeEmbedding(chunk.embedding), chunk.preview]
+        );
+      });
     } catch (e) {
       error("[cache] updateNote failed:", e);
     }
@@ -334,7 +391,7 @@ export class CacheManager {
   async getNoteCount(): Promise<number> {
     try {
       const db = await this.getDb();
-      const stmt = db.prepare("SELECT COUNT(*) as count FROM embeddings");
+      const stmt = db.prepare("SELECT COUNT(DISTINCT path) as count FROM embeddings");
       stmt.step();
       const result = stmt.getAsObject();
       stmt.free();
@@ -348,19 +405,28 @@ export class CacheManager {
   async getAllNotes(): Promise<Map<string, IndexedNote>> {
     try {
       const db = await this.getDb();
-      const stmt = db.prepare("SELECT path, mtime, embedding, preview FROM embeddings");
-      const notes = new Map<string, IndexedNote>();
+      const stmt = db.prepare(
+        "SELECT path, chunk_idx, mtime, embedding, preview FROM embeddings ORDER BY path, chunk_idx"
+      );
+      const grouped = new Map<string, { mtime: number; preview: string; embs: number[][] }>();
 
       while (stmt.step()) {
         const row = stmt.getAsObject();
-        notes.set(row.path as string, {
-          path: row.path as string,
-          mtime: row.mtime as number,
-          embedding: this.decodeEmbedding(row.embedding as Uint8Array),
-          preview: row.preview as string,
-        });
+        const path = row.path as string;
+        let g = grouped.get(path);
+        if (!g) {
+          g = { mtime: row.mtime as number, preview: "", embs: [] };
+          grouped.set(path, g);
+        }
+        if ((row.chunk_idx as number) === 0) g.preview = row.preview as string;
+        g.embs.push(this.decodeEmbedding(row.embedding as Uint8Array));
       }
       stmt.free();
+
+      const notes = new Map<string, IndexedNote>();
+      for (const [path, g] of grouped) {
+        notes.set(path, { path, mtime: g.mtime, embedding: meanPool(g.embs), preview: g.preview });
+      }
       return notes;
     } catch (e) {
       error("[cache] getAllNotes failed:", e);

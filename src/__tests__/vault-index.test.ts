@@ -13,8 +13,8 @@ vi.mock("../core/embedder", () => ({
 
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
-import { VaultIndex, prepareNoteText } from "../core/vault-index";
-import type { IndexedNote } from "../core/vault-index";
+import { VaultIndex, prepareNoteText, prepareNoteChunks, splitIntoChunks, MAX_WORDS } from "../core/vault-index";
+import type { IndexedNote, NoteChunk } from "../core/vault-index";
 import type { CacheManager } from "../core/cache-manager";
 
 function makeMockFile(path: string): TFile {
@@ -33,27 +33,53 @@ function makeApp(paths: string[] = []): App {
   } as unknown as App;
 }
 
-function makeNote(path: string, embedding: number[], mtime = 1000): IndexedNote {
-  return { path, mtime, embedding, preview: `Preview of ${path}` };
+interface StoredNote {
+  mtime: number;
+  chunks: NoteChunk[];
+}
+
+function makeChunks(embedding: number[], preview = "p"): NoteChunk[] {
+  return [{ embedding, preview }];
+}
+
+// Mirror of CacheManager.meanPool: single-chunk notes are returned unchanged,
+// multi-chunk notes get the L2-normalised mean.
+function meanPool(embs: number[][]): number[] {
+  if (embs.length === 1) return embs[0];
+  const dim = embs[0]?.length ?? 0;
+  const c = new Array(dim).fill(0);
+  for (const e of embs) for (let d = 0; d < dim; d++) c[d] += e[d];
+  let norm = 0;
+  for (let d = 0; d < dim; d++) { c[d] /= embs.length; norm += c[d] * c[d]; }
+  norm = Math.sqrt(norm) || 1;
+  for (let d = 0; d < dim; d++) c[d] /= norm;
+  return c;
+}
+
+function toIndexedNote(path: string, stored: StoredNote): IndexedNote {
+  return {
+    path,
+    mtime: stored.mtime,
+    embedding: meanPool(stored.chunks.map((c) => c.embedding)),
+    preview: stored.chunks[0]?.preview ?? "",
+  };
 }
 
 class MockCacheManager implements Partial<CacheManager> {
-  private notes: Map<string, IndexedNote> = new Map();
-
-  async save(notes: Map<string, IndexedNote>): Promise<void> {
-    this.notes = new Map(notes);
-  }
+  private notes: Map<string, StoredNote> = new Map();
 
   async load(): Promise<Map<string, IndexedNote> | null> {
-    return this.notes.size > 0 ? new Map(this.notes) : null;
+    if (this.notes.size === 0) return null;
+    return new Map(Array.from(this.notes, ([p, s]) => [p, toIndexedNote(p, s)]));
   }
 
   async getNote(path: string): Promise<IndexedNote | null> {
-    return this.notes.get(path) || null;
+    const stored = this.notes.get(path);
+    return stored ? toIndexedNote(path, stored) : null;
   }
 
-  async updateNote(path: string, note: IndexedNote): Promise<void> {
-    this.notes.set(path, note);
+  async updateNote(path: string, mtime: number, chunks: NoteChunk[]): Promise<void> {
+    this.notes.set(path, { mtime, chunks });
   }
 
   async removeNote(path: string): Promise<void> {
@@ -70,11 +96,17 @@ class MockCacheManager implements Partial<CacheManager> {
     excludePath?: string
   ): Promise<Array<{ path: string; score: number; preview: string }>> {
     const { cosine } = await import("../core/embedder");
+    // Keep the best-scoring chunk per note, matching the real cache manager.
     const results: Array<{ path: string; score: number; preview: string }> = [];
-    for (const [path, note] of this.notes) {
+    for (const [path, stored] of this.notes) {
       if (path === excludePath) continue;
-      const score = cosine(embedding, note.embedding);
-      results.push({ path, score, preview: note.preview });
+      let best = -Infinity;
+      let preview = "";
+      for (const chunk of stored.chunks) {
+        const score = cosine(embedding, chunk.embedding);
+        if (score > best) { best = score; preview = chunk.preview; }
+      }
+      results.push({ path, score: best, preview });
     }
     results.sort((a, b) => b.score - a.score);
     return results.slice(0, k);
@@ -85,7 +117,7 @@ class MockCacheManager implements Partial<CacheManager> {
   }
 
   async getAllNotes(): Promise<Map<string, IndexedNote>> {
-    return new Map(this.notes);
+    return new Map(Array.from(this.notes, ([p, s]) => [p, toIndexedNote(p, s)]));
   }
 }
 
@@ -214,6 +246,67 @@ describe("prepareNoteText — wikilink normalisation", () => {
   });
 });
 
+// prepareNoteChunks / splitIntoChunks
+// These verify parity with the Python pipeline's chunking (_split_sections and
+// the MAX_WORDS threshold in preprocessing/preprocessor/pipeline.py).
+
+describe("splitIntoChunks — chunking", () => {
+  const longSection = (heading: string) => `${heading}\n${"word ".repeat(200)}`;
+
+  it("keeps short notes as a single chunk", () => {
+    const prepared = "---\ntitle: N\n---\n# N\n\nShort body.";
+    expect(splitIntoChunks(prepared, "---\ntitle: N\n---\n")).toEqual([prepared]);
+  });
+
+  it("does not chunk a long note that has no ## / ### headings", () => {
+    const prepared = "---\ntitle: N\n---\n" + "word ".repeat(MAX_WORDS + 50);
+    const chunks = splitIntoChunks(prepared, "---\ntitle: N\n---\n");
+    expect(chunks).toHaveLength(1);
+  });
+
+  it("splits a long note before ## / ### headings", () => {
+    const fmBlock = "---\ntitle: N\n---\n";
+    const prepared = fmBlock + "Intro.\n" + longSection("## A") + "\n" + longSection("### B");
+    const chunks = splitIntoChunks(prepared, fmBlock);
+    expect(chunks.length).toBe(3); // intro + ## A + ### B
+    expect(chunks[1].startsWith("## A")).toBe(false); // fmBlock prepended
+    expect(chunks[1].startsWith(fmBlock)).toBe(true);
+    expect(chunks[2].startsWith(fmBlock)).toBe(true);
+  });
+
+  it("keeps the leading chunk's frontmatter without duplicating it", () => {
+    const fmBlock = "---\ntitle: N\n---\n";
+    const prepared = fmBlock + "Intro.\n" + longSection("## A");
+    const chunks = splitIntoChunks(prepared, fmBlock);
+    // The first chunk already starts with the frontmatter, so it is left as-is.
+    expect(chunks[0].startsWith(fmBlock)).toBe(true);
+    expect(chunks[0].indexOf("---", fmBlock.length)).toBe(-1);
+  });
+
+  it("every chunk carries the title/metadata when a note is split", () => {
+    const fmBlock = "---\ntitle: N\ntags:\n  - x\n---\n";
+    const prepared = fmBlock + longSection("## A") + "\n" + longSection("## B");
+    const chunks = splitIntoChunks(prepared, fmBlock);
+    for (const c of chunks) expect(c).toContain("title: N");
+  });
+});
+
+describe("prepareNoteChunks — end to end", () => {
+  it("returns one chunk for a short note", () => {
+    const chunks = prepareNoteChunks("# Note\n\nBody.", "Note");
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toContain("title: Note");
+  });
+
+  it("normalises wikilinks within each chunk", () => {
+    const body = "Intro [[Foo]].\n" + "## A\n" + "word ".repeat(MAX_WORDS) + " [[Bar|baz]]";
+    const chunks = prepareNoteChunks(body, "Note");
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join("\n")).not.toContain("[[");
+    expect(chunks.join("\n")).toContain("baz");
+  });
+});
+
 // VaultIndex — data methods
 
 describe("VaultIndex — data methods", () => {
@@ -226,8 +319,7 @@ describe("VaultIndex — data methods", () => {
   it("stores and retrieves notes", async () => {
     const cache = new MockCacheManager();
     const index = makeIndex(undefined, cache as any);
-    const note = makeNote("a.md", [1, 0]);
-    await (cache as any).updateNote("a.md", note);
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
     const retrieved = await index.getNote("a.md");
     expect(retrieved?.mtime).toBe(1000);
     expect(retrieved?.embedding).toEqual([1, 0]);
@@ -243,8 +335,7 @@ describe("VaultIndex — data methods", () => {
   it("getEmbedding returns the stored embedding", async () => {
     const cache = new MockCacheManager();
     const index = makeIndex(undefined, cache as any);
-    const note = makeNote("a.md", [0.5, 0.5]);
-    await (cache as any).updateNote("a.md", note);
+    await (cache as any).updateNote("a.md", 1000, makeChunks([0.5, 0.5]));
     const emb = await index.getEmbedding("a.md");
     expect(emb).toEqual([0.5, 0.5]);
   });
@@ -259,8 +350,7 @@ describe("VaultIndex — data methods", () => {
   it("getMtime returns stored mtime", async () => {
     const cache = new MockCacheManager();
     const index = makeIndex(undefined, cache as any);
-    const note = makeNote("a.md", [], 9999);
-    await (cache as any).updateNote("a.md", note);
+    await (cache as any).updateNote("a.md", 9999, makeChunks([]));
     const mtime = await index.getMtime("a.md");
     expect(mtime).toBe(9999);
   });
@@ -339,9 +429,9 @@ describe("VaultIndex — searchByEmbedding", () => {
     const cache = new MockCacheManager();
     const index = makeIndex(makeApp(paths), cache as any);
 
-    await (cache as any).updateNote("a.md", makeNote("a.md", [1, 0]));
-    await (cache as any).updateNote("b.md", makeNote("b.md", [0.5, 0.5]));
-    await (cache as any).updateNote("c.md", makeNote("c.md", [0, 1]));
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([0.5, 0.5]));
+    await (cache as any).updateNote("c.md", 1000, makeChunks([0, 1]));
 
     const results = await index.searchByEmbedding([1, 0], 3);
     expect(results[0].file.path).toBe("a.md");
@@ -354,9 +444,9 @@ describe("VaultIndex — searchByEmbedding", () => {
     const cache = new MockCacheManager();
     const index = makeIndex(makeApp(paths), cache as any);
 
-    await (cache as any).updateNote("a.md", makeNote("a.md", [1, 0]));
-    await (cache as any).updateNote("b.md", makeNote("b.md", [0, 1]));
-    await (cache as any).updateNote("c.md", makeNote("c.md", [0.5, 0.5]));
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([0, 1]));
+    await (cache as any).updateNote("c.md", 1000, makeChunks([0.5, 0.5]));
 
     const results = await index.searchByEmbedding([1, 0], 2);
     expect(results).toHaveLength(2);
@@ -367,8 +457,8 @@ describe("VaultIndex — searchByEmbedding", () => {
     const cache = new MockCacheManager();
     const index = makeIndex(makeApp(paths), cache as any);
 
-    await (cache as any).updateNote("a.md", makeNote("a.md", [1, 0]));
-    await (cache as any).updateNote("b.md", makeNote("b.md", [1, 0]));
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([1, 0]));
 
     const results = await index.searchByEmbedding([1, 0], 10, "a.md");
     expect(results.map((r) => r.file.path)).not.toContain("a.md");
@@ -378,8 +468,8 @@ describe("VaultIndex — searchByEmbedding", () => {
     const cache = new MockCacheManager();
     const index = makeIndex(makeApp(["a.md"]), cache as any);
 
-    await (cache as any).updateNote("a.md", makeNote("a.md", [1, 0]));
-    await (cache as any).updateNote("b.md", makeNote("b.md", [0, 1]));
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([0, 1]));
 
     const paths = (await index.searchByEmbedding([1, 0], 10)).map((r) => r.file.path);
     expect(paths).toContain("a.md");

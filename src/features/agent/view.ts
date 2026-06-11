@@ -347,6 +347,7 @@ export class AgentView extends ItemView {
   }
 
   private appendMessageEl(role: "user" | "assistant", text: string): HTMLElement {
+    this.messagesEl.querySelector(".fyp-agent-empty")?.remove();
     const msg = this.messagesEl.createEl("div", { cls: `fyp-message fyp-message-${role}` });
     msg.createEl("span", { cls: "fyp-message-role", text: role === "user" ? "you" : "assistant" });
     msg.createEl("div", { cls: "fyp-message-content", text });

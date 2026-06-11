@@ -257,6 +257,66 @@
   padding: 24px;
 }
 
+.fyp-agent-text + .fyp-tool-call,
+.fyp-tool-call + .fyp-agent-text,
+.fyp-tool-call + .fyp-tool-call {
+  margin-top: 6px;
+}
+
+.fyp-tool-call {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  font-size: 0.82em;
+}
+
+.fyp-tool-summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  list-style: none;
+}
+
+.fyp-tool-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fyp-tool-summary::before {
+  content: "▸";
+  color: var(--text-faint);
+}
+
+.fyp-tool-call[open] .fyp-tool-summary::before {
+  content: "▾";
+}
+
+.fyp-tool-name {
+  color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+.fyp-tool-args {
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fyp-tool-result {
+  margin: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 0.95em;
+  color: var(--text-muted);
+}
+
 .fyp-loading-dots::after {
   content: "●●●";
   display: inline-block;

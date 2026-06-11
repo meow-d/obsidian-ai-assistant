@@ -187,31 +187,56 @@ export class AgentView extends ItemView {
 
   private async renderCurrentConversation(): Promise<void> {
     this.messagesEl.empty();
-    const visibleMessages = this.store.active.messages.filter(
+    const messages = this.store.active.messages;
+    const hasVisible = messages.some(
       (m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content,
     );
-    if (visibleMessages.length === 0) {
+    if (!hasVisible) {
       this.messagesEl.createEl("div", {
         cls: "fyp-agent-empty",
         text: "Continue a chat in History, or type a message below.",
       });
     }
-    for (const msg of this.store.active.messages) {
+
+    // A response spans several assistant/tool messages (thinking, tool calls,
+    // tool results, final answer); group them into one assistant bubble.
+    let body: HTMLElement | null = null;
+    const toolChips = new Map<string, HTMLElement>();
+
+    for (const msg of messages) {
       if (msg.role === "system" && typeof msg.content === "string" && msg.content.startsWith(SUMMARY_PREFIX)) {
+        body = null;
         const el = this.messagesEl.createEl("div", { cls: "fyp-message fyp-summary" });
         el.createEl("span", { cls: "fyp-message-role", text: "summary" });
         const contentEl = el.createEl("div", { cls: "fyp-message-content" });
-        const body = msg.content.slice(SUMMARY_PREFIX.length).trimStart();
-        await MarkdownRenderer.render(this.app, body, contentEl, "", this);
+        await MarkdownRenderer.render(this.app, msg.content.slice(SUMMARY_PREFIX.length).trimStart(), contentEl, "", this);
         continue;
       }
-      if ((msg.role !== "user" && msg.role !== "assistant") || typeof msg.content !== "string" || !msg.content) continue;
-      const el = this.appendMessageEl(msg.role, "");
-      const contentEl = el.querySelector(".fyp-message-content") as HTMLElement;
+
+      if (msg.role === "user" && typeof msg.content === "string" && msg.content) {
+        body = null;
+        const el = this.appendMessageEl("user", "");
+        (el.querySelector(".fyp-message-content") as HTMLElement).setText(msg.content);
+        continue;
+      }
+
       if (msg.role === "assistant") {
-        await MarkdownRenderer.render(this.app, msg.content, contentEl, "", this);
-      } else {
-        contentEl.setText(msg.content);
+        if (!body) body = this.appendMessageEl("assistant", "").querySelector(".fyp-message-content") as HTMLElement;
+        if (typeof msg.content === "string" && msg.content) {
+          const textEl = body.createEl("div", { cls: "fyp-agent-text" });
+          await MarkdownRenderer.render(this.app, msg.content, textEl, "", this);
+        }
+        for (const tc of msg.tool_calls ?? []) {
+          if (tc.type !== "function") continue;
+          toolChips.set(tc.id, this.appendToolChip(body, tc.function.name, tc.function.arguments));
+        }
+        continue;
+      }
+
+      if (msg.role === "tool" && body) {
+        const id = (msg as { tool_call_id?: string }).tool_call_id;
+        const chip = id ? toolChips.get(id) : undefined;
+        if (chip) this.setToolResult(chip, typeof msg.content === "string" ? msg.content : "");
       }
     }
   }
@@ -302,28 +327,48 @@ export class AgentView extends ItemView {
     const sendHistory: AgentMessage[] = [systemMsg, ...this.store.active.messages];
 
     const assistantEl = this.appendMessageEl("assistant", "");
-    const contentEl = assistantEl.querySelector(".fyp-message-content") as HTMLElement;
-    const loadingEl = contentEl.createEl("span", { cls: "fyp-loading-dots" });
-    let fullResponse = "";
+    const body = assistantEl.querySelector(".fyp-message-content") as HTMLElement;
+    const loadingEl = body.createEl("span", { cls: "fyp-loading-dots" });
+    const toolChips = new Map<string, HTMLElement>();
 
-    const stream = this.makeStreamingRenderer(contentEl);
+    // Track the active text block so thinking text, tool calls, and the final
+    // answer render as separate interleaved blocks within one assistant bubble.
+    let curText = "";
+    let curTextEl: HTMLElement | null = null;
+    let curStream: ReturnType<typeof this.makeStreamingRenderer> | null = null;
+    const finalizeText = () => {
+      const s = curStream, el = curTextEl, t = curText;
+      curText = ""; curTextEl = null; curStream = null;
+      if (s && el) void s.flush(t);
+    };
 
     try {
       const tools = makeToolHandlers(this.index, this.appRef);
-      const returnedMsgs = await runAgentLoop(
-        sendHistory,
-        this.settings,
-        tools,
-        (chunk) => {
+      const returnedMsgs = await runAgentLoop(sendHistory, this.settings, tools, {
+        onText: (delta) => {
           if (loadingEl.parentNode) loadingEl.remove();
-          fullResponse += chunk;
-          stream.schedule(fullResponse);
+          if (!curTextEl) {
+            curTextEl = body.createEl("div", { cls: "fyp-agent-text" });
+            curStream = this.makeStreamingRenderer(curTextEl);
+          }
+          curText += delta;
+          curStream!.schedule(curText);
         },
-        (status) => { this.statusEl.setText(status); },
-      );
+        onToolCall: (call) => {
+          if (loadingEl.parentNode) loadingEl.remove();
+          finalizeText();
+          toolChips.set(call.id, this.appendToolChip(body, call.name, call.args));
+          this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+        },
+        onToolResult: (result) => {
+          const chip = toolChips.get(result.id);
+          if (chip) this.setToolResult(chip, result.content);
+        },
+        onStatus: (status) => { this.statusEl.setText(status); },
+      });
       this.statusEl.setText("");
 
-      await stream.flush(fullResponse);
+      finalizeText();
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 
       const newMsgs = returnedMsgs.slice(sendHistory.length);
@@ -336,7 +381,8 @@ export class AgentView extends ItemView {
       this.store.setMessages(this.store.active.messages.slice(0, -1));
       await this.store.save();
       assistantEl.addClass("fyp-message-error");
-      contentEl.setText((err as Error).message);
+      body.empty();
+      body.setText((err as Error).message);
       this.statusEl.setText("");
     }
 
@@ -385,6 +431,28 @@ export class AgentView extends ItemView {
         await pump();
       },
     };
+  }
+
+  private formatToolArgs(args: string): string {
+    try {
+      return JSON.stringify(JSON.parse(args));
+    } catch {
+      return args;
+    }
+  }
+
+  private appendToolChip(container: HTMLElement, name: string, args: string): HTMLElement {
+    const details = container.createEl("details", { cls: "fyp-tool-call" });
+    const summary = details.createEl("summary", { cls: "fyp-tool-summary" });
+    summary.createEl("span", { cls: "fyp-tool-name", text: name.replace(/_/g, " ") });
+    const formatted = this.formatToolArgs(args);
+    if (formatted) summary.createEl("span", { cls: "fyp-tool-args", text: formatted });
+    return details;
+  }
+
+  private setToolResult(details: HTMLElement, content: string): void {
+    const pre = details.createEl("pre", { cls: "fyp-tool-result" });
+    pre.setText(content.length > 2000 ? content.slice(0, 2000) + "…" : content);
   }
 
   private appendMessageEl(role: "user" | "assistant", text: string): HTMLElement {

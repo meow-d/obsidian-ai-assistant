@@ -163,28 +163,28 @@ describe("runAgentLoop", () => {
   it("throws when API key is missing", async () => {
     const settings = { ...baseSettings, llmApiKey: "" };
     await expect(
-      runAgentLoop([], settings, noopTools, vi.fn())
+      runAgentLoop([], settings, noopTools, { onText: vi.fn() })
     ).rejects.toThrow("No API key configured");
   });
 
   it("calls onChunk with text when model responds directly", async () => {
     mockCreate.mockReturnValueOnce(textStream("Hello world"));
     const chunks: string[] = [];
-    await runAgentLoop([{ role: "user", content: "hi" }], baseSettings, noopTools, (c) => chunks.push(c));
+    await runAgentLoop([{ role: "user", content: "hi" }], baseSettings, noopTools, { onText: (c) => chunks.push(c) });
     expect(chunks).toEqual(["Hello world"]);
   });
 
   it("does not call onChunk when stream yields no content", async () => {
     mockCreate.mockReturnValueOnce(emptyStream());
     const onChunk = vi.fn();
-    await runAgentLoop([], baseSettings, noopTools, onChunk);
+    await runAgentLoop([], baseSettings, noopTools, { onText: onChunk });
     expect(onChunk).not.toHaveBeenCalled();
   });
 
   it("returns the full message chain", async () => {
     mockCreate.mockReturnValueOnce(textStream("reply"));
     const msgs = await runAgentLoop(
-      [{ role: "user", content: "hi" }], baseSettings, noopTools, vi.fn()
+      [{ role: "user", content: "hi" }], baseSettings, noopTools, { onText: vi.fn() }
     );
     // should include the original user message + new assistant message
     expect(msgs.some((m) => m.role === "user")).toBe(true);
@@ -198,7 +198,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(textStream("Found it"));
 
     const chunks: string[] = [];
-    await runAgentLoop([{ role: "user", content: "find PKM" }], baseSettings, tools, (c) => chunks.push(c));
+    await runAgentLoop([{ role: "user", content: "find PKM" }], baseSettings, tools, { onText: (c) => chunks.push(c) });
 
     expect(tools.search_vault).toHaveBeenCalledWith("PKM", undefined);
     expect(chunks).toEqual(["Found it"]);
@@ -210,7 +210,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(toolCallStream("read_note", { path: "notes/my-note.md" }))
       .mockReturnValueOnce(textStream("Done"));
 
-    await runAgentLoop([], baseSettings, tools, vi.fn());
+    await runAgentLoop([], baseSettings, tools, { onText: vi.fn() });
     expect(tools.read_note).toHaveBeenCalledWith("notes/my-note.md");
   });
 
@@ -220,7 +220,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(toolCallStream("get_linked_notes", { path: "notes/a.md" }))
       .mockReturnValueOnce(textStream("Done"));
 
-    await runAgentLoop([], baseSettings, tools, vi.fn());
+    await runAgentLoop([], baseSettings, tools, { onText: vi.fn() });
     expect(tools.get_linked_notes).toHaveBeenCalledWith("notes/a.md");
   });
 
@@ -230,7 +230,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(toolCallStream("edit_note", { path: "notes/a.md", content: "# New content" }))
       .mockReturnValueOnce(textStream("Done"));
 
-    await runAgentLoop([], baseSettings, tools, vi.fn());
+    await runAgentLoop([], baseSettings, tools, { onText: vi.fn() });
     expect(tools.edit_note).toHaveBeenCalledWith("notes/a.md", "# New content");
   });
 
@@ -241,7 +241,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(textStream("Handled"));
 
     const chunks: string[] = [];
-    await runAgentLoop([], baseSettings, tools, (c) => chunks.push(c));
+    await runAgentLoop([], baseSettings, tools, { onText: (c) => chunks.push(c) });
     expect(chunks).toEqual(["Handled"]);
 
     const secondCallMsgs = mockCreate.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
@@ -254,7 +254,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(toolCallStream("nonexistent_tool", {}))
       .mockReturnValueOnce(textStream("Done"));
 
-    await runAgentLoop([], baseSettings, noopTools, vi.fn());
+    await runAgentLoop([], baseSettings, noopTools, { onText: vi.fn() });
     const secondCallMsgs = mockCreate.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
     const toolMsg = secondCallMsgs.find((m) => m.role === "tool");
     expect(toolMsg?.content).toContain("Unknown tool");
@@ -265,7 +265,7 @@ describe("runAgentLoop", () => {
     mockCreate.mockImplementation(() => toolCallStream("search_vault", { query: "loop" }));
 
     await expect(
-      runAgentLoop([], baseSettings, noopTools, vi.fn())
+      runAgentLoop([], baseSettings, noopTools, { onText: vi.fn() })
     ).rejects.toThrow("exceeded maximum");
   });
 
@@ -275,7 +275,7 @@ describe("runAgentLoop", () => {
       .mockReturnValueOnce(textStream("Done"));
 
     const statuses: string[] = [];
-    await runAgentLoop([], baseSettings, noopTools, vi.fn(), (s) => statuses.push(s));
+    await runAgentLoop([], baseSettings, noopTools, { onText: vi.fn(), onStatus: (s) => statuses.push(s) });
     expect(statuses[0]).toContain("search vault");
   });
 
@@ -284,7 +284,7 @@ describe("runAgentLoop", () => {
     mockCreate.mockReturnValueOnce(textStream("ok"));
     const settings = { ...baseSettings, llmProvider: "uat" as const, llmApiKey: "key" };
 
-    await runAgentLoop([], settings, noopTools, vi.fn());
+    await runAgentLoop([], settings, noopTools, { onText: vi.fn() });
 
     const constructorCall = vi.mocked(OpenAI).mock.calls.at(-1)?.[0] as { baseURL?: string } | undefined;
     expect(constructorCall?.baseURL).toContain("fyp-gateway");
@@ -297,7 +297,7 @@ describe("runAgentLoop", () => {
       { role: "user" as const, content: "hello" },
     ];
 
-    await runAgentLoop(history, baseSettings, noopTools, vi.fn());
+    await runAgentLoop(history, baseSettings, noopTools, { onText: vi.fn() });
 
     const sentMsgs = mockCreate.mock.calls[0][0].messages as Array<{ role: string; content: string }>;
     expect(sentMsgs.some((m) => m.role === "system" && m.content === "sys")).toBe(true);
@@ -311,7 +311,7 @@ describe("runAgentLoop", () => {
       { choices: [{ delta: { content: " world" } }] },
     ]));
     const chunks: string[] = [];
-    await runAgentLoop([], baseSettings, noopTools, (c) => chunks.push(c));
+    await runAgentLoop([], baseSettings, noopTools, { onText: (c) => chunks.push(c) });
     expect(chunks).toEqual(["Hello", " world"]);
   });
 });

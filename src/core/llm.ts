@@ -168,17 +168,23 @@ export async function compactHistory(
   ];
 }
 
+export interface AgentCallbacks {
+  onText: (delta: string) => void;
+  onToolCall?: (call: { id: string; name: string; args: string }) => void;
+  onToolResult?: (result: { id: string; name: string; content: string }) => void;
+  onStatus?: (status: string) => void;
+}
+
 /**
  * Run the agentic loop with streaming.
- * Returns the full message chain for history storage.
- * onChunk is called with each text delta; onStatus with tool activity.
+ * Returns the full message chain for history storage. Callbacks stream the
+ * assistant's text, its tool calls, and the tool results as they happen.
  */
 export async function runAgentLoop(
   history: AgentMessage[],
   settings: FypSettings,
   tools: ToolHandlers,
-  onChunk: (text: string) => void,
-  onStatus?: (status: string) => void,
+  cb: AgentCallbacks,
 ): Promise<AgentMessage[]> {
   const client = makeClient(settings);
   const model = settings.llmProvider === "uat" ? UAT_MODEL : settings.llmModel;
@@ -202,7 +208,7 @@ export async function runAgentLoop(
 
       if (delta.content) {
         content += delta.content;
-        onChunk(delta.content);
+        cb.onText(delta.content);
       }
 
       for (const tc of delta.tool_calls ?? []) {
@@ -230,10 +236,11 @@ export async function runAgentLoop(
     if (!toolCalls) return msgs;
 
     for (const tc of toolCalls) {
+      cb.onToolCall?.({ id: tc.id, name: tc.function.name, args: tc.function.arguments });
       let result: string;
       try {
         const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
-        onStatus?.(`${tc.function.name.replace(/_/g, " ")}…`);
+        cb.onStatus?.(`${tc.function.name.replace(/_/g, " ")}…`);
         switch (tc.function.name) {
           case "search_vault":
             result = await tools.search_vault(args.query as string, args.limit as number | undefined);
@@ -259,6 +266,7 @@ export async function runAgentLoop(
       } catch (e) {
         result = `Tool error: ${(e as Error).message}`;
       }
+      cb.onToolResult?.({ id: tc.id, name: tc.function.name, content: result });
       msgs.push({ role: "tool", tool_call_id: tc.id, content: result });
     }
   }

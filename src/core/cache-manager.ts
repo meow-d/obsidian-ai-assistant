@@ -328,7 +328,6 @@ export class CacheManager {
 
   async getNote(path: string): Promise<IndexedNote | null> {
     try {
-      log(`[cache] getNote: path="${path}"`);
       const db = await this.getDb();
       const stmt = db.prepare(
         "SELECT chunk_idx, mtime, embedding, preview FROM embeddings WHERE path = ? ORDER BY chunk_idx"
@@ -345,11 +344,7 @@ export class CacheManager {
       }
       stmt.free();
 
-      if (embs.length === 0) {
-        log(`[cache] getNote: note not found`);
-        return null;
-      }
-      log(`[cache] getNote: found ${embs.length} chunk(s)`);
+      if (embs.length === 0) return null;
       return { path, mtime, embedding: meanPool(embs), preview };
     } catch (e) {
       error("[cache] getNote failed:", e);

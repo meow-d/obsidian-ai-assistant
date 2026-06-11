@@ -336,4 +336,8 @@ export class VaultIndex {
   async getNote(path: string): Promise<IndexedNote | null> {
     return (await this.cacheManager?.getNote(path)) ?? null;
   }
+
+  async getAllNotes(): Promise<Map<string, IndexedNote>> {
+    return (await this.cacheManager?.getAllNotes()) ?? new Map();
+  }
 }

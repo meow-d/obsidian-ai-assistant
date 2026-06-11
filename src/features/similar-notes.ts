@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, TFolder, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, TFile, TFolder, WorkspaceLeaf, debounce } from "obsidian";
 import { cosine } from "../core/embedder";
 import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
@@ -31,6 +31,7 @@ export class SimilarNotesView extends ItemView {
   private refreshInterval: number | null = null;
   private plugin: FypPlugin;
   private generation = 0;
+  private lastPath: string | null = null;
   private splitCache = new Map<string, { result: SplitAnalysis | null; timestamp: number }>();
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, minSimilarity: number, plugin: FypPlugin) {
@@ -57,15 +58,16 @@ export class SimilarNotesView extends ItemView {
     });
 
     await this.refresh();
+    const debouncedRefresh = debounce(() => this.refresh(), 200);
     this.registerInterval(
       // @ts-ignore - window.setInterval returns number in browser context
       this.refreshInterval = window.setInterval(() => this.refresh(), 30_000)
     );
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => this.refresh())
+      this.app.workspace.on("active-leaf-change", () => debouncedRefresh())
     );
     this.registerEvent(
-      this.app.workspace.on("file-open", () => this.refresh())
+      this.app.workspace.on("file-open", () => debouncedRefresh())
     );
   }
 
@@ -87,8 +89,14 @@ export class SimilarNotesView extends ItemView {
     };
 
     if (!activeFile) {
+      this.lastPath = null;
       render(() => container.createEl("p", { text: "No note open." }));
       return;
+    }
+
+    if (activeFile.path !== this.lastPath) {
+      this.lastPath = activeFile.path;
+      render(() => container.createEl("p", { cls: "fyp-muted", text: "Loading suggestions…" }));
     }
 
     const emb = await this.index.getEmbedding(activeFile.path);
@@ -189,10 +197,9 @@ export class SimilarNotesView extends ItemView {
     const now = Date.now();
     const resurfaceResults: ResurfaceResult[] = [];
 
-    for (const path of this.index.getAllPaths()) {
+    const allNotes = await this.index.getAllNotes();
+    for (const [path, note] of allNotes) {
       if (path === activeFile.path) continue;
-      const note = await this.index.getNote(path);
-      if (!note) continue;
 
       const file = this.app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile)) continue;

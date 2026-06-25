@@ -35,7 +35,7 @@ async function loadModel(modelPath?: string): Promise<{ vectorSize: number }> {
 }
 
 async function embed(texts: string[]): Promise<number[][]> {
-  if (!_pipe) throw new Error("Model not loaded — call loadModel first");
+  if (!_pipe) await loadModel();
 
   const t0 = performance.now();
   const output = await _pipe(texts, { pooling: "mean", normalize: true });

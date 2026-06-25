@@ -1,7 +1,7 @@
 import "./force-onnxruntime-web"
 import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 
-const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
+const DEFAULT_MODEL = "meow-d/mdbr-leaf-ir-obsidian";
 
 let _pipe: FeatureExtractionPipeline | null = null;
 

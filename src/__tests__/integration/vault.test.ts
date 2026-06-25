@@ -17,7 +17,7 @@ import * as os from "os";
 vi.mock("../../core/embedder", async () => {
   const { pipeline } = await import("@huggingface/transformers");
 
-  const MODEL = "Xenova/all-MiniLM-L6-v2";
+  const MODEL = "meow-d/mdbr-leaf-ir-obsidian";
   let _pipe: any = null;
 
   async function getOrLoad() {
@@ -55,7 +55,7 @@ import { TFile, TFolder } from "obsidian";
 
 const VAULT_ROOT = "/home/meow_d/nerd-stuff/4_school/test-for-fyp/test_data3";
 const PLUGIN_DIR = path.resolve(__dirname, "../../..");
-const MODEL = "Xenova/all-MiniLM-L6-v2";
+const MODEL = "meow-d/mdbr-leaf-ir-obsidian";
 const MAX_NOTES = 50;
 
 // Vault scanning

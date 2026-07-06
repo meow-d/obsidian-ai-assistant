@@ -36,9 +36,10 @@ async function loadModel(modelPath?: string): Promise<{ vectorSize: number }> {
 
 async function embed(texts: string[]): Promise<number[][]> {
   if (!_pipe) await loadModel();
+  const pipe = _pipe as FeatureExtractionPipeline;
 
   const t0 = performance.now();
-  const output = await _pipe(texts, { pooling: "mean", normalize: true });
+  const output = await pipe(texts, { pooling: "mean", normalize: true });
   const elapsed = performance.now() - t0;
   if (process.env.NODE_ENV !== "production") console.log(`[embedder-worker] embed(${texts.length} texts) took ${elapsed.toFixed(0)}ms`);
 

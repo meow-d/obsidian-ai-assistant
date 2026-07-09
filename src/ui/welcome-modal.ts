@@ -37,7 +37,7 @@ export class WelcomeModal extends Modal {
 
   private renderPage1(): void {
     const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Welcome to FYP Plugin!" });
+    contentEl.createEl("h2", { text: "Welcome to Wikilink AI Assistant (tenative name)!" });
     contentEl.createEl("p", {
       text: "This plugin brings AI-powered knowledge management to your Obsidian vault. It uses custom fine-tuned embedding models to understand your notes and surface connections you might have missed.",
     });
@@ -100,17 +100,6 @@ export class WelcomeModal extends Modal {
         .addText((t) =>
           t
             .setPlaceholder("claude-sonnet-4-20250514")
-            .setValue(this.settings.llmModel)
-            .onChange((v) => { this.settings.llmModel = v; })
-        );
-    } else {
-      new Setting(contentEl)
-        .setName("Model")
-        .setDesc("Using UAT testers gateway")
-        .addDropdown((d) =>
-          d
-            .addOption("claude-sonnet", "Claude Sonnet")
-            .addOption("deepseek-v4-pro", "Deepseek V4 Pro")
             .setValue(this.settings.llmModel)
             .onChange((v) => { this.settings.llmModel = v; })
         );
@@ -197,9 +186,9 @@ export class WelcomeModal extends Modal {
       });
     } else {
       const finishBtn = btnRow.createEl("button", { cls: "mod-cta", text: "Finish" });
-      finishBtn.addEventListener("click", async () => {
-        await this.onSetupComplete();
+      finishBtn.addEventListener("click", () => {
         this.close();
+        void this.onSetupComplete();
       });
     }
 

@@ -19,7 +19,7 @@ Made as part of my degree final year project.
 | note split suggestions | detects when a note covers multiple distinct topics and suggests splitting it into separate notes. | embeddings, nlp | sidebar |
 | resurfacing forgotten notes | surfaces notes semantically similar to your current work that you haven't visited in a while. | embeddings, nlp, recency | sidebar |
 | custom LLM providers | bring your own api key and choose from multiple LLM providers (claude, deepseek, etc). | LLM | settings |
-| fine-tuned embedding model (WIP) | embedding model that's fine-tuned on obsidian notes and this plugin's functionality | embeddings | implementation detail |
+| [custom embedding model](https://huggingface.co/meow-d/mdbr-leaf-ir-obsidian) | embedding model that's fine-tuned on obsidian notes and this plugin's functionality | embeddings | implementation detail |
 
 ## privacy
 - LLM features (like AI agent) sends data to your configured LLM provider. Privacy concious users can configure it to be local

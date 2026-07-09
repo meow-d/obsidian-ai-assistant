@@ -1,6 +1,6 @@
 {
   "name": "fyp-plugin",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Wikilink-aware AI assistant for Obsidian",
   "main": "main.js",
   "scripts": {

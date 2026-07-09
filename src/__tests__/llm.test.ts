@@ -304,6 +304,33 @@ describe("runAgentLoop", () => {
     expect(sentMsgs.some((m) => m.role === "user" && m.content === "hello")).toBe(true);
   });
 
+  it("strips an assistant message with an empty tool_calls array before sending", async () => {
+    mockCreate.mockReturnValueOnce(textStream("reply"));
+    const history = [
+      { role: "user" as const, content: "hi" },
+      { role: "assistant" as const, content: "ok", tool_calls: [] },
+    ];
+
+    await runAgentLoop(history, baseSettings, noopTools, { onText: vi.fn() });
+
+    const sentMsgs = mockCreate.mock.calls[0][0].messages as Array<{ role: string; tool_calls?: unknown[] }>;
+    const assistantMsg = sentMsgs.find((m) => m.role === "assistant");
+    expect(assistantMsg && "tool_calls" in assistantMsg).toBe(false);
+  });
+
+  it("drops an orphaned tool message with no matching tool_calls entry", async () => {
+    mockCreate.mockReturnValueOnce(textStream("reply"));
+    const history = [
+      { role: "user" as const, content: "hi" },
+      { role: "tool" as const, tool_call_id: "call_missing", content: "stale result" },
+    ];
+
+    await runAgentLoop(history, baseSettings, noopTools, { onText: vi.fn() });
+
+    const sentMsgs = mockCreate.mock.calls[0][0].messages as Array<{ role: string }>;
+    expect(sentMsgs.some((m) => m.role === "tool")).toBe(false);
+  });
+
   it("streams text across multiple delta chunks", async () => {
     // two chunks from the same model response
     mockCreate.mockReturnValueOnce(makeStream([

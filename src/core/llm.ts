@@ -114,6 +114,35 @@ function makeClient(settings: FypSettings): OpenAI {
   return new OpenAI({ apiKey: settings.llmApiKey, baseURL, dangerouslyAllowBrowser: true });
 }
 
+/**
+ * Some OpenAI-compatible providers reject a message outright if it carries
+ * an empty `tool_calls` array, or if a `tool` message's `tool_call_id`
+ * doesn't match any tool call in the same list (e.g. after history was
+ * truncated/compacted mid tool-call chain, or loaded from an older stored
+ * conversation shape). Strip those degenerate shapes before every request.
+ */
+function sanitizeMessages(msgs: AgentMessage[]): AgentMessage[] {
+  const validToolCallIds = new Set<string>();
+  for (const msg of msgs) {
+    if (msg.role === "assistant" && msg.tool_calls) {
+      for (const tc of msg.tool_calls) validToolCallIds.add(tc.id);
+    }
+  }
+
+  const cleaned: AgentMessage[] = [];
+  for (const msg of msgs) {
+    if (msg.role === "assistant" && msg.tool_calls?.length === 0) {
+      const { tool_calls, ...rest } = msg;
+      void tool_calls;
+      cleaned.push(rest as AgentMessage);
+      continue;
+    }
+    if (msg.role === "tool" && !validToolCallIds.has(msg.tool_call_id)) continue;
+    cleaned.push(msg);
+  }
+  return cleaned;
+}
+
 function msgContent(msg: AgentMessage): string {
   if (typeof msg.content === "string") return msg.content;
   if (Array.isArray(msg.content)) return JSON.stringify(msg.content);
@@ -164,7 +193,7 @@ export async function compactHistory(
   const summary = response.choices[0]?.message?.content ?? "(no summary)";
   return [
     { role: "system", content: `${SUMMARY_PREFIX}\n\n${summary}` } as AgentMessage,
-    ...toKeep,
+    ...sanitizeMessages(toKeep),
   ];
 }
 
@@ -188,12 +217,12 @@ export async function runAgentLoop(
 ): Promise<AgentMessage[]> {
   const client = makeClient(settings);
   const model = settings.llmProvider === "uat" ? UAT_MODEL : settings.llmModel;
-  const msgs: AgentMessage[] = [...history];
+  const msgs: AgentMessage[] = sanitizeMessages(history);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const stream = await client.chat.completions.create({
       model,
-      messages: msgs,
+      messages: sanitizeMessages(msgs),
       tools: TOOLS,
       tool_choice: "auto",
       stream: true,

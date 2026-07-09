@@ -103,7 +103,7 @@ export function createWikilinkCandidateExtension(app: App, index: VaultIndex) {
 
       const menu = new Menu();
       menu.addItem((item) =>
-        item.setTitle(`Link → [[${match.result.file.basename}]]`).onClick(() => {
+        item.setTitle(`Link to [[${match.result.file.basename}]]`).onClick(() => {
           view.dispatch({
             changes: { from: match.from, to: match.to, insert: `[[${match.result.file.basename}|${match.phrase}]]` },
           });

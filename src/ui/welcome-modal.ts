@@ -1,7 +1,12 @@
 import { App, Modal, Setting } from "obsidian";
 import type { FypSettings } from "../settings";
+import screenshotSmartSuggestions from "../assets/screenshot_smartsuggestions.webp";
+import screenshotAgent from "../assets/screenshot_agent.webp";
+import screenshotInlineSuggestions from "../assets/screenshot_inlinesuggestions.webp";
+import screenshotSearch from "../assets/screenshot_search.webp";
+import screenshotOrphan from "../assets/screenshot_orphan.webp";
 
-const TOTAL_PAGES = 6;
+const TOTAL_PAGES = 8;
 
 export class WelcomeModal extends Modal {
   private settings: FypSettings;
@@ -29,6 +34,8 @@ export class WelcomeModal extends Modal {
       4: () => this.renderPage4(),
       5: () => this.renderPage5(),
       6: () => this.renderPage6(),
+      7: () => this.renderPage7(),
+      8: () => this.renderPage8(),
     };
 
     pages[this.page]?.();
@@ -96,10 +103,10 @@ export class WelcomeModal extends Modal {
     if (this.settings.llmProvider !== "uat") {
       new Setting(contentEl)
         .setName("Model")
-        .setDesc("Recommended: claude-sonnet-4-20250514 or deepseek/deepseek-v3")
+        .setDesc("Recommended: deepseek/deepseek-v4-flash")
         .addText((t) =>
           t
-            .setPlaceholder("claude-sonnet-4-20250514")
+            .setPlaceholder("deepseek/deepseek-v4-flash")
             .setValue(this.settings.llmModel)
             .onChange((v) => { this.settings.llmModel = v; })
         );
@@ -110,15 +117,9 @@ export class WelcomeModal extends Modal {
     const { contentEl } = this;
     contentEl.createEl("h2", { text: "Smart Suggestions Sidebar" });
     contentEl.createEl("p", {
-      text: "The Smart Suggestions sidebar appears on the right panel. It automatically shows notes that are semantically related to the one you're currently editing.",
+      text: "The Smart Suggestions sidebar automatically shows similar notes, tag suggestions, folder suggestions, and more.",
     });
-    contentEl.createEl("p", {
-      text: "It also surfaces tag suggestions, folder suggestions, and alerts you when a note might benefit from being split into smaller notes.",
-    });
-    contentEl.createEl("p", {
-      cls: "fyp-modal-desc",
-      text: "Screenshots will be added here.",
-    });
+    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotSmartSuggestions } });
   }
 
   private renderPage4(): void {
@@ -128,12 +129,10 @@ export class WelcomeModal extends Modal {
       text: "The AI Agent has full access to your vault. Ask it questions, request summaries, or have it help you write and link notes.",
     });
     contentEl.createEl("p", {
-      text: "Open it from the sidebar switcher or via the command palette with \"Open AI agent chat\".",
-    });
-    contentEl.createEl("p", {
       cls: "fyp-modal-desc",
       text: "You can also quote selected text from a note directly into the agent chat via the right-click context menu.",
     });
+    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotAgent } });
   }
 
   private renderPage5(): void {
@@ -143,11 +142,31 @@ export class WelcomeModal extends Modal {
       text: "As you type, the plugin highlights words and phrases that match other notes in your vault. Click a highlight to insert a wikilink.",
     });
     contentEl.createEl("p", {
+      cls: "fyp-modal-desc",
       text: "You can also run \"Scan vault for wikilink suggestions\" from the command palette to review all candidate links across every note at once.",
     });
+    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotInlineSuggestions } });
   }
 
   private renderPage6(): void {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: "Natural Language Search" });
+    contentEl.createEl("p", {
+      text: "Search your vault by meaning, not just keywords. Describe what you're looking for and the plugin finds notes that match semantically, even if they don't share exact wording.",
+    });
+    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotSearch } });
+  }
+
+  private renderPage7(): void {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: "Orphan Note Rescuer" });
+    contentEl.createEl("p", {
+      text: "Notes with no incoming or outgoing links are easy to lose track of. The Orphan Note Rescuer finds these isolated notes and suggests related notes to link them to.",
+    });
+    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotOrphan } });
+  }
+
+  private renderPage8(): void {
     const { contentEl } = this;
     contentEl.createEl("h2", { text: "You're all set!" });
     contentEl.createEl("p", {
@@ -155,7 +174,7 @@ export class WelcomeModal extends Modal {
     });
     contentEl.createEl("p", {
       cls: "fyp-modal-desc",
-      text: "You can re-open this guide any time from Settings -> FYP Plugin -> Show welcome guide on startup.",
+      text: "You can re-open this guide any time from Settings > FYP Plugin > Show welcome guide on startup.",
     });
   }
 

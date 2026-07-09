@@ -69,6 +69,13 @@
   margin-bottom: 12px;
 }
 
+.fyp-modal-screenshot {
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  margin-bottom: 8px;
+}
+
 .fyp-orphan-section {
   margin-bottom: 16px;
 }

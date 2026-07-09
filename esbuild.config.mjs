@@ -63,6 +63,7 @@ const context = await esbuild.context({
 	define: {
 		"process.env.NODE_ENV": prod ? '"production"' : '"development"',
 	},
+	loader: { ".webp": "dataurl" },
 	plugins: [inlineWorker(), polyfillPlugin],
 });
 

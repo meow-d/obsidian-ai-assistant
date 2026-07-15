@@ -3,6 +3,7 @@ import { cosine } from "../core/embedder";
 import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
+import { makeActivatable } from "../ui/a11y";
 import { computeTagSuggestions } from "./tag-suggestions";
 import { computeFolderSuggestions } from "./folder-suggestions";
 import { analyseSplit, NoteSplitModal, type SplitAnalysis } from "./note-split";
@@ -134,7 +135,7 @@ export class SimilarNotesView extends ItemView {
     for (const r of results) {
       const item = list.createEl("div", { cls: "fyp-similar-item" });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
-      link.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
+      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
@@ -227,7 +228,7 @@ export class SimilarNotesView extends ItemView {
     for (const r of resurfaceResults) {
       const item = list.createEl("div", { cls: "fyp-resurface-item" });
       const link = item.createEl("a", { cls: "fyp-resurface-title", text: r.file.basename });
-      link.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
+      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", {
         cls: "fyp-similar-score",
         text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,

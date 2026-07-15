@@ -1,7 +1,8 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
-import type { VaultIndex } from "../core/vault-index";
+import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
+import { makeActivatable } from "../ui/a11y";
 
 export const SEARCH_VIEW = "fyp-search";
 
@@ -10,6 +11,8 @@ export class SearchView extends ItemView {
   private topK: number;
   private resultsEl!: HTMLElement;
   private plugin: FypPlugin;
+  private results: SearchResult[] = [];
+  private selectedIndex = -1;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
@@ -42,22 +45,57 @@ export class SearchView extends ItemView {
     inputEl.addEventListener("input", async (e) => {
       await this.runSearch((e.target as HTMLInputElement).value.trim());
     });
+
+    inputEl.addEventListener("keydown", (e) => {
+      if (this.results.length === 0) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this.selectedIndex = Math.min(this.selectedIndex + 1, this.results.length - 1);
+        this.renderResults();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+        this.renderResults();
+      } else if (e.key === "Enter" && this.selectedIndex >= 0) {
+        e.preventDefault();
+        this.app.workspace.getLeaf(false).openFile(this.results[this.selectedIndex].file);
+      } else if (e.key === "Escape") {
+        this.selectedIndex = -1;
+        this.renderResults();
+      }
+    });
   }
 
   private async runSearch(query: string): Promise<void> {
-    if (!query) return;
-    const results = await this.index.search(query, this.topK);
+    if (!query) {
+      this.results = [];
+      this.selectedIndex = -1;
+      this.resultsEl.empty();
+      return;
+    }
+    this.results = await this.index.search(query, this.topK);
+    this.selectedIndex = -1;
+    this.renderResults();
+  }
+
+  private renderResults(): void {
     this.resultsEl.empty();
-    if (results.length === 0) {
+    if (this.results.length === 0) {
       this.resultsEl.createEl("p", { text: "No results.", cls: "fyp-muted" });
       return;
     }
-    for (const r of results) {
-      const item = this.resultsEl.createEl("div", { cls: "fyp-similar-item" });
+    for (let i = 0; i < this.results.length; i++) {
+      const r = this.results[i];
+      const item = this.resultsEl.createEl("div", {
+        cls: "fyp-similar-item" + (i === this.selectedIndex ? " fyp-item-selected" : ""),
+      });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
-      link.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
+      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
+
+      if (i === this.selectedIndex) item.scrollIntoView({ block: "nearest" });
     }
   }
 

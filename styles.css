@@ -44,6 +44,24 @@
   border-color: var(--interactive-accent);
 }
 
+.fyp-item-selected {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.fyp-similar-item:focus-visible,
+.fyp-resurface-item:focus-visible,
+.fyp-similar-title:focus-visible,
+.fyp-resurface-title:focus-visible,
+.fyp-history-item:focus-visible,
+.fyp-switcher-btn:focus-visible,
+.fyp-chip:focus-visible,
+.fyp-orphan-suggestion-link:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
 .fyp-similar-title,
 .fyp-resurface-title {
   display: block;

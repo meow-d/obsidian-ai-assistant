@@ -8,6 +8,7 @@ import type { VaultIndex } from "../../core/vault-index";
 import type { FypSettings } from "../../settings";
 import type FypPlugin from "../../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../../ui/sidebar-switcher";
+import { makeActivatable } from "../../ui/a11y";
 import { ConversationStore } from "./store";
 import { buildRagContext } from "./rag";
 import { makeToolHandlers } from "./tools";
@@ -181,7 +182,7 @@ export class AgentView extends ItemView {
       });
       item.createEl("div", { cls: "fyp-history-preview", text: preview });
       item.createEl("div", { cls: "fyp-history-date", text: date });
-      item.addEventListener("click", () => this.loadConversation(i));
+      makeActivatable(item, () => this.loadConversation(i));
     }
   }
 

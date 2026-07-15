@@ -3,6 +3,8 @@ import type { VaultIndex, SearchResult } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
+import { renderMatchScore } from "../ui/score-badge";
+import { renderIndexingStatus } from "../ui/indexing-status";
 
 export const ORPHAN_RESCUER_VIEW = "fyp-orphan-rescuer";
 
@@ -16,6 +18,7 @@ export class OrphanRescuerView extends ItemView {
   private topK: number;
   private plugin: FypPlugin;
   private entries: OrphanEntry[] = [];
+  private unsubscribeIndexing: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
@@ -39,7 +42,14 @@ export class OrphanRescuerView extends ItemView {
       }
     });
 
+    if (this.index.isIndexing) {
+      this.unsubscribeIndexing = renderIndexingStatus(container, this.index, () => this.onOpen());
+      return;
+    }
+
+    const loadingEl = container.createEl("p", { text: "Scanning vault for orphan notes…", cls: "fyp-muted" });
     await this.loadOrphans();
+    loadingEl.remove();
     await this.render(container);
   }
 
@@ -93,10 +103,12 @@ export class OrphanRescuerView extends ItemView {
         const item = list.createEl("div", { cls: "fyp-orphan-suggestion-item" });
         const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: r.file.basename });
         makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-        item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+        renderMatchScore(item, r.score);
       }
     }
   }
 
-  async onClose(): Promise<void> {}
+  async onClose(): Promise<void> {
+    this.unsubscribeIndexing?.();
+  }
 }

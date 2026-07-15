@@ -4,6 +4,8 @@ import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
+import { renderMatchScore } from "../ui/score-badge";
+import { renderIndexingStatus } from "../ui/indexing-status";
 import { computeTagSuggestions } from "./tag-suggestions";
 import { computeFolderSuggestions } from "./folder-suggestions";
 import { analyseSplit, NoteSplitModal, type SplitAnalysis } from "./note-split";
@@ -34,6 +36,7 @@ export class SimilarNotesView extends ItemView {
   private generation = 0;
   private lastPath: string | null = null;
   private splitCache = new Map<string, { result: SplitAnalysis | null; timestamp: number }>();
+  private unsubscribeIndexing: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, minSimilarity: number, plugin: FypPlugin) {
     super(leaf);
@@ -74,6 +77,7 @@ export class SimilarNotesView extends ItemView {
 
   async onClose(): Promise<void> {
     if (this.refreshInterval !== null) clearInterval(this.refreshInterval);
+    this.unsubscribeIndexing?.();
   }
 
   async refresh(): Promise<void> {
@@ -88,6 +92,15 @@ export class SimilarNotesView extends ItemView {
       if (switcherEl) container.appendChild(switcherEl);
       body();
     };
+
+    this.unsubscribeIndexing?.();
+    this.unsubscribeIndexing = null;
+    if (this.index.isIndexing) {
+      render(() => {
+        this.unsubscribeIndexing = renderIndexingStatus(container, this.index, () => this.refresh());
+      });
+      return;
+    }
 
     if (!activeFile) {
       this.lastPath = null;
@@ -136,7 +149,7 @@ export class SimilarNotesView extends ItemView {
       const item = list.createEl("div", { cls: "fyp-similar-item" });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+      renderMatchScore(item, r.score);
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }
@@ -247,10 +260,8 @@ export class SimilarNotesView extends ItemView {
       const item = list.createEl("div", { cls: "fyp-resurface-item" });
       const link = item.createEl("a", { cls: "fyp-resurface-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      item.createEl("span", {
-        cls: "fyp-similar-score",
-        text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,
-      });
+      renderMatchScore(item, r.similarity);
+      item.createEl("span", { cls: "fyp-similar-score", text: ` · ${r.daysSince}d ago` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }

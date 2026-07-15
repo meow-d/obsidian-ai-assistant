@@ -1,10 +1,14 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, debounce } from "obsidian";
 import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
+import { renderMatchScore } from "../ui/score-badge";
+import { renderIndexingStatus } from "../ui/indexing-status";
 
 export const SEARCH_VIEW = "fyp-search";
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 export class SearchView extends ItemView {
   private index: VaultIndex;
@@ -13,6 +17,8 @@ export class SearchView extends ItemView {
   private plugin: FypPlugin;
   private results: SearchResult[] = [];
   private selectedIndex = -1;
+  private searchGeneration = 0;
+  private unsubscribeIndexing: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
@@ -36,14 +42,31 @@ export class SearchView extends ItemView {
       }
     });
 
+    if (this.index.isIndexing) {
+      this.unsubscribeIndexing = renderIndexingStatus(container, this.index, () => this.onOpen());
+      return;
+    }
+
     const inputEl = container.createEl("input", {
       cls: "fyp-search-input",
       attr: { type: "text", placeholder: "Describe what you want in natural language..." },
     });
     this.resultsEl = container.createEl("div", { cls: "fyp-search-results" });
 
-    inputEl.addEventListener("input", async (e) => {
-      await this.runSearch((e.target as HTMLInputElement).value.trim());
+    const debouncedSearch = debounce((query: string) => this.runSearch(query), SEARCH_DEBOUNCE_MS);
+
+    inputEl.addEventListener("input", (e) => {
+      const query = (e.target as HTMLInputElement).value.trim();
+      if (!query) {
+        this.searchGeneration++;
+        this.results = [];
+        this.selectedIndex = -1;
+        this.resultsEl.empty();
+        return;
+      }
+      this.resultsEl.empty();
+      this.resultsEl.createEl("p", { text: "Searching…", cls: "fyp-muted" });
+      debouncedSearch(query);
     });
 
     inputEl.addEventListener("keydown", (e) => {
@@ -68,13 +91,10 @@ export class SearchView extends ItemView {
   }
 
   private async runSearch(query: string): Promise<void> {
-    if (!query) {
-      this.results = [];
-      this.selectedIndex = -1;
-      this.resultsEl.empty();
-      return;
-    }
-    this.results = await this.index.search(query, this.topK);
+    const gen = ++this.searchGeneration;
+    const results = await this.index.search(query, this.topK);
+    if (gen !== this.searchGeneration) return; // a newer search superseded this one
+    this.results = results;
     this.selectedIndex = -1;
     this.renderResults();
   }
@@ -92,12 +112,14 @@ export class SearchView extends ItemView {
       });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+      renderMatchScore(item, r.score);
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
 
       if (i === this.selectedIndex) item.scrollIntoView({ block: "nearest" });
     }
   }
 
-  async onClose(): Promise<void> {}
+  async onClose(): Promise<void> {
+    this.unsubscribeIndexing?.();
+  }
 }

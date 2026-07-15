@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, TFolder, WorkspaceLeaf, debounce } from "obsidian";
+import { ItemView, Notice, TFile, TFolder, WorkspaceLeaf, debounce, setIcon } from "obsidian";
 import { cosine } from "../core/embedder";
 import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
@@ -168,11 +168,27 @@ export class SimilarNotesView extends ItemView {
     if (tags.length === 0) return;
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Tag suggestions" });
-    const list = container.createEl("div", { cls: "fyp-similar-list" });
+    const row = container.createEl("div", { cls: "fyp-chip-row" });
     for (const { tag, score } of tags) {
-      const item = list.createEl("div", { cls: "fyp-similar-item" });
-      item.createEl("code", { cls: "fyp-similar-title", text: tag });
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${score.toFixed(3)})` });
+      const chip = row.createEl("span", { cls: "fyp-chip" });
+      setIcon(chip.createSpan({ cls: "fyp-chip-icon" }), "tag");
+      chip.createSpan({ text: tag });
+      chip.createSpan({ cls: "fyp-chip-score", text: score.toFixed(2) });
+
+      const activate = async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return;
+        await this.app.fileManager.processFrontMatter(activeFile, (fm) => {
+          if (!Array.isArray(fm.tags)) fm.tags = fm.tags ? [fm.tags] : [];
+          if (!fm.tags.includes(tag)) fm.tags.push(tag);
+        });
+        chip.addClass("fyp-chip-added");
+        chip.querySelector(".fyp-chip-icon") && setIcon(chip.querySelector(".fyp-chip-icon") as HTMLElement, "check");
+        chip.tabIndex = -1;
+        chip.removeAttribute("role");
+        new Notice(`Added #${tag}`);
+      };
+      makeActivatable(chip, activate);
     }
   }
 
@@ -180,18 +196,20 @@ export class SimilarNotesView extends ItemView {
     if (folders.length === 0) return;
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Folder suggestions" });
-    const list = container.createEl("div", { cls: "fyp-similar-list" });
+    const row = container.createEl("div", { cls: "fyp-chip-row" });
     for (const { folder, score } of folders) {
-      const item = list.createEl("div", { cls: "fyp-similar-item" });
-      const link = item.createEl("a", { cls: "fyp-similar-title", text: folder.path });
-      link.addEventListener("click", async () => {
+      const chip = row.createEl("span", { cls: "fyp-chip" });
+      setIcon(chip.createSpan({ cls: "fyp-chip-icon" }), "folder-input");
+      chip.createSpan({ text: folder.path });
+      chip.createSpan({ cls: "fyp-chip-score", text: score.toFixed(2) });
+
+      makeActivatable(chip, async () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return;
         const newPath = folder.path + "/" + activeFile.name;
         await this.app.fileManager.renameFile(activeFile, newPath);
         new Notice(`${activeFile.name} moved to ${folder.path}`);
       });
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${score.toFixed(3)})` });
     }
   }
 

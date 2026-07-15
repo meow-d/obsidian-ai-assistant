@@ -109,6 +109,57 @@
   white-space: normal;
 }
 
+.fyp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.fyp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  font-size: 0.8em;
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.fyp-chip:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.fyp-chip-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.fyp-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.fyp-chip-score {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.fyp-chip-added {
+  color: var(--text-success);
+  border-color: var(--text-success);
+  cursor: default;
+}
+
+.fyp-chip-added .fyp-chip-icon {
+  color: var(--text-success);
+}
+
 .fyp-muted {
   padding: 6px 8px;
   font-size: 0.85em;

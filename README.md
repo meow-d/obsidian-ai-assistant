@@ -1,4 +1,4 @@
-# Wikilink-Aware AI Assistant for Obsidian
+# Kaho
 ![](https://raw.githubusercontent.com/meow-d/obsidian-ai-assistant/refs/heads/main/src/assets/screenshot_smartsuggestions.webp)
 
 As PKM knowledge bases grow, users struggle to maintain connections between notes and rediscover relevant information. Existing AI features address this poorly, focusing on content generation rather than supporting the synthesis and linking processes that make note-taking valuable. This AI assistant plugin aims to assist the users' workflows while preserving those processes.

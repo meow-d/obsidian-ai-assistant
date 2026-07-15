@@ -1,6 +1,6 @@
 {
-  "id": "fyp-plugin",
-  "name": "Wikilink AI Assistant",
+  "id": "kaho",
+  "name": "Kaho",
   "version": "0.0.4",
   "minAppVersion": "1.4.0",
   "description": "AI-powered wikilink suggestions, semantic search, and note organisation.",

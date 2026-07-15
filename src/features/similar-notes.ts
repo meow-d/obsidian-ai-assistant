@@ -4,7 +4,6 @@ import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
-import { renderMatchScore } from "../ui/score-badge";
 import { renderIndexingStatus } from "../ui/indexing-status";
 import { computeTagSuggestions } from "./tag-suggestions";
 import { computeFolderSuggestions } from "./folder-suggestions";
@@ -149,7 +148,7 @@ export class SimilarNotesView extends ItemView {
       const item = list.createEl("div", { cls: "fyp-similar-item" });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      renderMatchScore(item, r.score);
+      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }
@@ -260,8 +259,10 @@ export class SimilarNotesView extends ItemView {
       const item = list.createEl("div", { cls: "fyp-resurface-item" });
       const link = item.createEl("a", { cls: "fyp-resurface-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      renderMatchScore(item, r.similarity);
-      item.createEl("span", { cls: "fyp-similar-score", text: ` · ${r.daysSince}d ago` });
+      item.createEl("span", {
+        cls: "fyp-similar-score",
+        text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,
+      });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }

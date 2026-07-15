@@ -3,7 +3,6 @@ import type { SearchResult, VaultIndex } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
-import { renderMatchScore } from "../ui/score-badge";
 import { renderIndexingStatus } from "../ui/indexing-status";
 
 export const SEARCH_VIEW = "fyp-search";
@@ -112,7 +111,7 @@ export class SearchView extends ItemView {
       });
       const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
       makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      renderMatchScore(item, r.score);
+      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
 
       if (i === this.selectedIndex) item.scrollIntoView({ block: "nearest" });

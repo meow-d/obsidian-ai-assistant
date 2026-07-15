@@ -3,7 +3,6 @@ import type { VaultIndex, SearchResult } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
-import { renderMatchScore } from "../ui/score-badge";
 import { renderIndexingStatus } from "../ui/indexing-status";
 
 export const ORPHAN_RESCUER_VIEW = "fyp-orphan-rescuer";
@@ -103,7 +102,7 @@ export class OrphanRescuerView extends ItemView {
         const item = list.createEl("div", { cls: "fyp-orphan-suggestion-item" });
         const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: r.file.basename });
         makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-        renderMatchScore(item, r.score);
+        item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       }
     }
   }

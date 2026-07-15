@@ -101,35 +101,6 @@
   margin-top: 3px;
 }
 
-.fyp-match-score {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 3px;
-  vertical-align: middle;
-}
-
-.fyp-match-score-track {
-  display: inline-block;
-  width: 32px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--background-modifier-border);
-  overflow: hidden;
-}
-
-.fyp-match-score-fill {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--text-muted);
-}
-
-.fyp-match-score-label {
-  font-size: 0.72em;
-  color: var(--text-muted);
-}
-
 .fyp-similar-preview,
 .fyp-resurface-preview {
   font-size: 0.82em;

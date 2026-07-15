@@ -131,6 +131,12 @@ function extractPreviewText(prepared: string): string {
   return content.slice(0, 200).replace(/\n/g, " ");
 }
 
+export interface IndexingState {
+  current: number;
+  total: number;
+  status: string;
+}
+
 export class VaultIndex {
   private app: App;
   private modelPath: string;
@@ -139,6 +145,8 @@ export class VaultIndex {
   private wikilinkGraph: Map<string, Set<string>> = new Map();
   private pathCache: Set<string> = new Set();
   private indexSize: number = 0;
+  private indexingState: IndexingState | null = null;
+  private indexingListeners: Set<() => void> = new Set();
 
   constructor(app: App, modelPath: string, cacheManager?: CacheManager) {
     this.app = app;
@@ -146,53 +154,92 @@ export class VaultIndex {
     this.cacheManager = cacheManager || null;
   }
 
+  get isIndexing(): boolean {
+    return this.indexingState !== null;
+  }
+
+  get indexingStatus(): IndexingState | null {
+    return this.indexingState;
+  }
+
+  get modelName(): string {
+    return this.modelPath || "meow-d/mdbr-leaf-ir-obsidian (bundled)";
+  }
+
+  /** Subscribe to indexing state changes; returns an unsubscribe function. */
+  onIndexingChange(cb: () => void): () => void {
+    this.indexingListeners.add(cb);
+    return () => this.indexingListeners.delete(cb);
+  }
+
+  private setIndexingState(state: IndexingState | null): void {
+    this.indexingState = state;
+    for (const cb of this.indexingListeners) cb();
+  }
+
   async build(onProgress?: (current: number, total: number) => void, onStatus?: (msg: string) => void): Promise<void> {
     const files = this.app.vault.getMarkdownFiles();
     log(`[index] build() called: ${files.length} files to index`);
     const t0 = performance.now();
-    setEmbedderStatusCallback(onStatus ?? null);
-    await initEmbedder(this.modelPath || undefined);
-    setEmbedderStatusCallback(null);
+    this.setIndexingState({ current: 0, total: files.length, status: "Starting…" });
 
-    // Load cached metadata to check mtime
-    const cached = await this.cacheManager?.load(this.modelPath);
-    const cachedNotes = cached || new Map();
-    this.pathCache.clear();
-    for (const path of cachedNotes.keys()) {
-      this.pathCache.add(path);
-    }
+    try {
+      const reportStatus = (msg: string) => {
+        if (this.indexingState) this.setIndexingState({ ...this.indexingState, status: msg });
+        onStatus?.(msg);
+      };
+      const reportProgress = (current: number, total: number) => {
+        if (this.indexingState) this.setIndexingState({ ...this.indexingState, current, total });
+        onProgress?.(current, total);
+      };
 
-    log(`[index] loaded ${cachedNotes.size} from cache, checking for stale entries`);
-    // Remove files that no longer exist in vault
-    const filePaths = new Set(files.map((f) => f.path));
-    for (const path of cachedNotes.keys()) {
-      if (!filePaths.has(path)) {
-        log(`[index] removing stale cached entry: "${path}"`);
-        await this.cacheManager?.removeNote(path);
-        this.pathCache.delete(path);
+      setEmbedderStatusCallback(reportStatus);
+      await initEmbedder(this.modelPath || undefined);
+      setEmbedderStatusCallback(null);
+
+      // Load cached metadata to check mtime
+      const cached = await this.cacheManager?.load(this.modelPath);
+      const cachedNotes = cached || new Map();
+      this.pathCache.clear();
+      for (const path of cachedNotes.keys()) {
+        this.pathCache.add(path);
       }
-    }
 
-    // Index new/modified files
-    const filesToIndex = files.filter((f) => {
-      const cached = cachedNotes.get(f.path);
-      return !cached || cached.mtime !== f.stat.mtime;
-    });
+      log(`[index] loaded ${cachedNotes.size} from cache, checking for stale entries`);
+      // Remove files that no longer exist in vault
+      const filePaths = new Set(files.map((f) => f.path));
+      for (const path of cachedNotes.keys()) {
+        if (!filePaths.has(path)) {
+          log(`[index] removing stale cached entry: "${path}"`);
+          await this.cacheManager?.removeNote(path);
+          this.pathCache.delete(path);
+        }
+      }
 
-    if (filesToIndex.length > 0) {
-      log(`[index] indexing ${filesToIndex.length} new/modified files`);
-      onProgress?.(this.pathCache.size, files.length);
-      await this.indexFiles(filesToIndex, () => {
-        // Report progress relative to total files
-        onProgress?.(this.pathCache.size, files.length);
+      // Index new/modified files
+      const filesToIndex = files.filter((f) => {
+        const cached = cachedNotes.get(f.path);
+        return !cached || cached.mtime !== f.stat.mtime;
       });
+
+      if (filesToIndex.length > 0) {
+        log(`[index] indexing ${filesToIndex.length} new/modified files`);
+        reportStatus("Indexing notes…");
+        reportProgress(this.pathCache.size, files.length);
+        await this.indexFiles(filesToIndex, () => {
+          // Report progress relative to total files
+          reportProgress(this.pathCache.size, files.length);
+        });
+      }
+
+      this.buildWikilinkGraph(files);
+
+      await this.cacheManager?.saveModelPath(this.modelPath);
+      this.indexSize = await this.cacheManager?.getNoteCount() ?? 0;
+      log(`[index] build() finished in ${(performance.now() - t0).toFixed(0)}ms, ${this.indexSize} notes in cache`);
+    } finally {
+      this.setIndexingState(null);
     }
-
-    this.buildWikilinkGraph(files);
-
-    await this.cacheManager?.saveModelPath(this.modelPath);
-    this.indexSize = await this.cacheManager?.getNoteCount() ?? 0;
-    log(`[index] build() finished in ${(performance.now() - t0).toFixed(0)}ms, ${this.indexSize} notes in cache`);
   }
 
   private async indexFiles(files: TFile[], onProgress?: (current: number, total: number) => void): Promise<void> {

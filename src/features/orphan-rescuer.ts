@@ -89,10 +89,10 @@ export class OrphanRescuerView extends ItemView {
         continue;
       }
 
+      const list = section.createEl("div", { cls: "fyp-orphan-suggestions" });
       for (const r of suggestions) {
-        const item = section.createEl("div");
-        item.createEl("span", { cls: "fyp-orphan-similar", text: r.file.basename });
-        item.createEl("span", { cls: "fyp-orphan-similar", text: ` (${r.score.toFixed(3)})` });
+        const item = list.createEl("span", { cls: "fyp-orphan-similar", text: `${r.file.basename} (${r.score.toFixed(3)})` });
+        item.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
       }
     }
   }

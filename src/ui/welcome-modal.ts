@@ -72,20 +72,14 @@ export class WelcomeModal extends Modal {
           })
       );
 
-    const keyDesc =
-      this.settings.llmProvider === "uat"
-        ? "API key provided for UAT (will be auto-configured if you select this)"
-        : "Your API key for the selected provider";
-
     new Setting(contentEl)
       .setName("API Key")
-      .setDesc(keyDesc)
+      .setDesc("Your API key for the selected provider")
       .addText((t) =>
         t
-          .setPlaceholder(this.settings.llmProvider === "uat" ? "Auto-configured" : "sk-…")
+          .setPlaceholder("sk-…")
           .setValue(this.settings.llmApiKey)
           .onChange((v) => { this.settings.llmApiKey = v; })
-          .setDisabled(this.settings.llmProvider === "uat")
       );
 
     if (this.settings.llmProvider === "openai-compatible") {

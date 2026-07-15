@@ -24,9 +24,25 @@
 
 .fyp-orphan-suggestions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+.fyp-orphan-suggestion-item {
+  font-size: 0.85em;
+}
+
+.fyp-orphan-suggestion-link {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.fyp-orphan-suggestion-link:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline;
 }
 
 .fyp-similar-item,
@@ -75,7 +91,6 @@
   color: var(--interactive-accent);
 }
 
-.fyp-orphan-similar,
 .fyp-similar-score {
   display: inline-block;
   font-size: 0.72em;
@@ -84,16 +99,6 @@
   border-radius: 10px;
   padding: 1px 7px;
   margin-top: 3px;
-}
-
-.fyp-orphan-similar {
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.fyp-orphan-similar:hover {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
 }
 
 .fyp-similar-preview,

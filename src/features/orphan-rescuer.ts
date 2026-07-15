@@ -2,6 +2,7 @@ import { ItemView, TFile, WorkspaceLeaf } from "obsidian";
 import type { VaultIndex, SearchResult } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
+import { makeActivatable } from "../ui/a11y";
 
 export const ORPHAN_RESCUER_VIEW = "fyp-orphan-rescuer";
 
@@ -67,18 +68,16 @@ export class OrphanRescuerView extends ItemView {
       return;
     }
 
-    container.createEl("h2", {
-      text: "Orphans and similar note preview",
-    });
+    container.createEl("h2", { text: "Orphan notes" });
     container.createEl("p", {
-      text: "Click to open orphan and switch to similar notes sidebar.",
+      text: "These orphan notes don't have any incoming or outgoing links. Here are similar notes to help you get started with linking them!",
       cls: "fyp-modal-desc",
     });
 
     for (const { file, suggestions } of this.entries) {
       const section = container.createEl("div", { cls: "fyp-orphan-section" });
       const heading = section.createEl("a", { cls: "fyp-similar-title", text: file.basename });
-      heading.addEventListener("click", async () => {
+      makeActivatable(heading, () => {
         this.app.workspace.getLeaf(false).openFile(file);
         this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.ORPHAN_RESCUER);
         this.plugin.activateViewFromSwitcher(SIDEBAR_VIEWS.SIMILAR_NOTES);
@@ -91,8 +90,10 @@ export class OrphanRescuerView extends ItemView {
 
       const list = section.createEl("div", { cls: "fyp-orphan-suggestions" });
       for (const r of suggestions) {
-        const item = list.createEl("span", { cls: "fyp-orphan-similar", text: `${r.file.basename} (${r.score.toFixed(3)})` });
-        item.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
+        const item = list.createEl("div", { cls: "fyp-orphan-suggestion-item" });
+        const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: r.file.basename });
+        makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
+        item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       }
     }
   }

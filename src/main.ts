@@ -57,11 +57,13 @@ export default class FypPlugin extends Plugin {
     this.addCommand({
       id: "semantic-search",
       name: "Search notes (semantic)",
+      hotkeys: [{ modifiers: ["Mod", "Alt"], key: "s" }],
       callback: () => this.activateView(SEARCH_VIEW),
     });
     this.addCommand({
       id: "open-similar-notes",
       name: "Open similar notes sidebar",
+      hotkeys: [{ modifiers: ["Mod", "Alt"], key: "l" }],
       callback: () => this.activateView(SIMILAR_NOTES_VIEW),
     });
     this.addCommand({
@@ -72,11 +74,13 @@ export default class FypPlugin extends Plugin {
     this.addCommand({
       id: "find-orphan-notes",
       name: "Find orphan notes",
+      hotkeys: [{ modifiers: ["Mod", "Alt"], key: "o" }],
       callback: () => this.activateView(ORPHAN_RESCUER_VIEW),
     });
     this.addCommand({
       id: "open-agent",
       name: "Open AI agent chat",
+      hotkeys: [{ modifiers: ["Mod", "Alt"], key: "a" }],
       callback: () => this.activateView(AGENT_VIEW),
     });
     this.addCommand({

@@ -33,6 +33,12 @@ function getWorker(): Worker {
     };
     w.onerror = (e: ErrorEvent) => {
       if (process.env.NODE_ENV !== "production") console.error("[embedder] worker error", e);
+      for (const [id, p] of pending) {
+        p.reject(new Error(e.message || "embedder worker crashed"));
+        pending.delete(id);
+      }
+      w.terminate();
+      if (worker === w) worker = null;
     };
     worker = w;
     return w;

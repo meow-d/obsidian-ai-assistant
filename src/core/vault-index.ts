@@ -28,6 +28,18 @@ const WL_RE = /\[\[([^\[\]|#^]+?)(?:[#^][^\[\]|]*)?(?:\|([^\[\]]*))?\]\]/g;
 // Mirrors preprocessing/preprocessor/pipeline.py.
 export const MAX_WORDS = 350;
 const SECTION_RE = /(?=^#{2,3} )/m;
+// Caps how many chunks are sent to the embedder in a single call so the ONNX
+// WASM backend never has to allocate tensors for an unbounded batch.
+const MAX_CHUNKS_PER_EMBED = 32;
+
+async function embedInBatches(texts: string[]): Promise<number[][]> {
+  if (texts.length <= MAX_CHUNKS_PER_EMBED) return embed(texts);
+  const out: number[][] = [];
+  for (let i = 0; i < texts.length; i += MAX_CHUNKS_PER_EMBED) {
+    out.push(...(await embed(texts.slice(i, i + MAX_CHUNKS_PER_EMBED))));
+  }
+  return out;
+}
 
 function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
@@ -195,7 +207,7 @@ export class VaultIndex {
       const perFileChunks = raws.map((raw, j) => this.prepareChunks(batch[j], raw));
       const flatTexts = perFileChunks.flat();
       const readMs = performance.now() - t0;
-      const embeddings = await embed(flatTexts);
+      const embeddings = await embedInBatches(flatTexts);
       const totalMs = performance.now() - t0;
       log(`[index] batch ${batchNum}/${totalBatches}: ${batch.length} files, ${flatTexts.length} chunks, read=${readMs.toFixed(0)}ms, total=${totalMs.toFixed(0)}ms`);
       let offset = 0;
@@ -247,7 +259,7 @@ export class VaultIndex {
     log(`[index] updateFile (${isNew ? "new" : "changed"}): "${file.path}"`);
     const raw = await this.app.vault.cachedRead(file);
     const chunkTexts = this.prepareChunks(file, raw);
-    const embeddings = await embed(chunkTexts);
+    const embeddings = await embedInBatches(chunkTexts);
     const chunks: NoteChunk[] = chunkTexts.map((text, c) => ({
       embedding: embeddings[c],
       preview: extractPreviewText(text),

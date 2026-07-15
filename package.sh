@@ -4,7 +4,7 @@ set -euo pipefail
 NAME="$(node -p "require('./manifest.json').id")"
 VERSION="$(node -p "require('./manifest.json').version")"
 
-npm run build
+pnpm run build
 
 PACKAGE_DIR="dist"
 ZIP_FILE="${NAME}-${VERSION}.zip"

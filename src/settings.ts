@@ -17,7 +17,7 @@ export interface FypSettings {
 export const DEFAULT_SETTINGS: FypSettings = {
   enableIndexing: true,
   modelPath: "",
-  topK: 10,
+  topK: 6,
   minSimilarity: 0.5,
   llmProvider: "uat",
   llmApiKey: "",

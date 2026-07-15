@@ -108,7 +108,8 @@ export class SimilarNotesView extends ItemView {
     const results = (await this.index.searchByEmbedding(emb, this.topK, activeFile.path)).filter(r => r.score >= this.minSimilarity);
     const tags = await computeTagSuggestions(this.app, this.index, activeFile, 10);
     const folders = await computeFolderSuggestions(this.app, this.index, activeFile);
-    const resurfaceResults = await this.checkResurfacing(emb, activeFile);
+    const alreadyShown = new Set(results.map(r => r.file.path));
+    const resurfaceResults = await this.checkResurfacing(emb, activeFile, alreadyShown);
     const split = await this.checkSplit(activeFile);
 
     render(() => {
@@ -193,13 +194,14 @@ export class SimilarNotesView extends ItemView {
     }
   }
 
-  private async checkResurfacing(activeEmb: number[], activeFile: TFile): Promise<ResurfaceResult[]> {
+  private async checkResurfacing(activeEmb: number[], activeFile: TFile, alreadyShown: Set<string>): Promise<ResurfaceResult[]> {
     const now = Date.now();
     const resurfaceResults: ResurfaceResult[] = [];
 
     const allNotes = await this.index.getAllNotes();
     for (const [path, note] of allNotes) {
       if (path === activeFile.path) continue;
+      if (alreadyShown.has(path)) continue; // avoid duplicating the Similar notes panel
 
       const file = this.app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile)) continue;

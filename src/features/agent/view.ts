@@ -37,6 +37,8 @@ export class AgentView extends ItemView {
   private historyBtn!: HTMLButtonElement;
   private showingHistory = false;
   private sending = false;
+  private indexingBanner!: HTMLElement;
+  private unsubscribeIndexing: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, app: App, settings: FypSettings, plugin: FypPlugin) {
     super(leaf);
@@ -79,6 +81,13 @@ export class AgentView extends ItemView {
 
     this.messagesEl = container.createEl("div", { cls: "fyp-agent-messages" });
     this.statusEl = container.createEl("div", { cls: "fyp-agent-status" });
+
+    this.indexingBanner = container.createEl("div", {
+      cls: "fyp-agent-indexing-banner",
+      text: "Vault still indexing, you can still use the agent but some functionality might not be available.",
+    });
+    this.unsubscribeIndexing = this.index.onIndexingChange(() => this.updateIndexingBanner());
+    this.updateIndexingBanner();
 
     const inputArea = container.createEl("div", { cls: "fyp-agent-input" });
 
@@ -130,6 +139,10 @@ export class AgentView extends ItemView {
     this.inputEl.addEventListener("input", syncPresets);
 
     await this.renderCurrentConversation();
+  }
+
+  private updateIndexingBanner(): void {
+    this.indexingBanner.toggle(this.index.isIndexing);
   }
 
   appendToInput(text: string): void {
@@ -460,5 +473,7 @@ export class AgentView extends ItemView {
     return msg;
   }
 
-  async onClose(): Promise<void> {}
+  async onClose(): Promise<void> {
+    this.unsubscribeIndexing?.();
+  }
 }

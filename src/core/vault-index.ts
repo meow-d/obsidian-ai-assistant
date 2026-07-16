@@ -291,14 +291,19 @@ export class VaultIndex {
   private buildWikilinkGraph(files: TFile[]): void {
     this.wikilinkGraph.clear();
     for (const file of files) {
-      const cache = this.app.metadataCache.getFileCache(file);
-      const targets = new Set<string>();
-      for (const link of cache?.links ?? []) {
-        const target = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
-        if (target) targets.add(target.path);
-      }
-      this.wikilinkGraph.set(file.path, targets);
+      this.wikilinkGraph.set(file.path, this.getFileLinkTargets(file));
     }
+  }
+
+  private getFileLinkTargets(file: TFile): Set<string> {
+    const cache = this.app.metadataCache.getFileCache(file);
+    const targets = new Set<string>();
+    const links = [...(cache?.links ?? []), ...(cache?.embeds ?? []), ...(cache?.frontmatterLinks ?? [])];
+    for (const link of links) {
+      const target = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
+      if (target) targets.add(target.path);
+    }
+    return targets;
   }
 
   async updateFile(file: TFile): Promise<void> {
@@ -315,12 +320,7 @@ export class VaultIndex {
     await this.cacheManager?.updateNote(file.path, file.stat.mtime, chunks);
     await this.cacheManager?.flush();
     this.pathCache.add(file.path);
-    const cache = this.app.metadataCache.getFileCache(file);
-    const targets = new Set<string>();
-    for (const link of cache?.links ?? []) {
-      const target = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
-      if (target) targets.add(target.path);
-    }
+    const targets = this.getFileLinkTargets(file);
     this.wikilinkGraph.set(file.path, targets);
     log(`[index] updateFile done in ${(performance.now() - t0).toFixed(0)}ms, links=${targets.size}`);
   }

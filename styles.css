@@ -1,3 +1,7 @@
+.workspace-tabs .workspace-leaf .view-content:has(> .fyp-sidebar-switcher) {
+  scrollbar-gutter: stable;
+}
+
 /* Shared list items */
 .fyp-similar-header {
   margin: 14px 0 6px;
@@ -275,9 +279,6 @@
   height: 100%;
 }
 
-.fyp-agent-switcher-bar {
-}
-
 .fyp-agent-actions {
   display: flex;
   gap: 4px;
@@ -444,9 +445,9 @@
   padding: 24px;
 }
 
-.fyp-agent-text + .fyp-tool-call,
-.fyp-tool-call + .fyp-agent-text,
-.fyp-tool-call + .fyp-tool-call {
+.fyp-agent-text+.fyp-tool-call,
+.fyp-tool-call+.fyp-agent-text,
+.fyp-tool-call+.fyp-tool-call {
   margin-top: 6px;
 }
 
@@ -514,9 +515,17 @@
 }
 
 @keyframes fyp-blink {
-  0%   { content: "●○○"; }
-  33%  { content: "●●○"; }
-  66%  { content: "●●●"; }
+  0% {
+    content: "●○○";
+  }
+
+  33% {
+    content: "●●○";
+  }
+
+  66% {
+    content: "●●●";
+  }
 }
 
 .fyp-message-error .fyp-message-role {
@@ -598,7 +607,9 @@
 }
 
 @keyframes fyp-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .fyp-indexing-flavour {

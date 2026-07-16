@@ -59,8 +59,7 @@ export class AgentView extends ItemView {
     container.addClass("fyp-agent");
     container.empty();
 
-    const switcherBar = container.createEl("div", { cls: "fyp-agent-switcher-bar" });
-    createSidebarSwitcher(switcherBar, SIDEBAR_VIEWS.AGENT, (viewType) => {
+    createSidebarSwitcher(container, SIDEBAR_VIEWS.AGENT, (viewType) => {
       if (viewType !== SIDEBAR_VIEWS.AGENT) {
         this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.AGENT);
         this.plugin.activateViewFromSwitcher(viewType);

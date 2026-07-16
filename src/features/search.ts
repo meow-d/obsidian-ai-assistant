@@ -106,9 +106,9 @@ export class SearchView extends ItemView {
       const item = this.resultsEl.createEl("div", {
         cls: "fyp-similar-item" + (i === this.selectedIndex ? " fyp-item-selected" : ""),
       });
-      const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
-      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+      item.createEl("span", { cls: "fyp-similar-title", text: r.file.basename });
+      makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
+      item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3) });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
 
       if (i === this.selectedIndex) item.scrollIntoView({ block: "nearest" });

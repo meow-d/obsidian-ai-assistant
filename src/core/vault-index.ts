@@ -163,7 +163,7 @@ export class VaultIndex {
   }
 
   get modelName(): string {
-    return this.modelPath || "meow-d/mdbr-leaf-ir-obsidian (bundled)";
+    return this.modelPath || "meow-d/mdbr-leaf-ir-obsidian";
   }
 
   /** Subscribe to indexing state changes; returns an unsubscribe function. */

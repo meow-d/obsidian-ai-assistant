@@ -84,7 +84,7 @@ export class AgentView extends ItemView {
 
     this.indexingBanner = container.createEl("div", {
       cls: "fyp-agent-indexing-banner",
-      text: "Vault still indexing, you can still use the agent but some functionality might not be available.",
+      text: "Vault still indexing. Some functionality might not be available.",
     });
     this.unsubscribeIndexing = this.index.onIndexingChange(() => this.updateIndexingBanner());
     this.updateIndexingBanner();

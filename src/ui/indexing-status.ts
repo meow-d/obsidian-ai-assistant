@@ -8,11 +8,11 @@ import type { VaultIndex } from "../core/vault-index";
 export function renderIndexingStatus(container: HTMLElement, index: VaultIndex, onDone: () => void): () => void {
   const panel = container.createEl("div", { cls: "fyp-indexing-panel" });
   panel.createEl("div", { cls: "fyp-indexing-spinner" });
-  panel.createEl("p", { cls: "fyp-indexing-flavour", text: "Indexing your vault… this can take a while!" });
+  panel.createEl("p", { cls: "fyp-indexing-flavour", text: "Indexing your vault... this can take a while!" });
   const barTrack = panel.createEl("div", { cls: "fyp-indexing-bar-track" });
   const barFill = barTrack.createEl("div", { cls: "fyp-indexing-bar-fill" });
-  const detail = panel.createEl("p", { cls: "fyp-indexing-detail fyp-muted" });
-  panel.createEl("p", { cls: "fyp-indexing-model fyp-muted", text: `Model: ${index.modelName}` });
+  const detail = panel.createEl("p", { cls: "fyp-indexing-detail" });
+  panel.createEl("p", { cls: "fyp-indexing-model", text: `Model: ${index.modelName}` });
 
   const update = () => {
     const state = index.indexingStatus;

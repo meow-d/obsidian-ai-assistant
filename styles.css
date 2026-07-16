@@ -277,8 +277,6 @@
 }
 
 .fyp-agent-switcher-bar {
-  display: flex;
-  align-items: center;
 }
 
 .fyp-agent-actions {
@@ -589,7 +587,6 @@
   text-align: center;
   gap: 8px;
   padding: 40px 20px;
-  margin: auto;
 }
 
 .fyp-indexing-spinner {
@@ -614,7 +611,6 @@
 
 .fyp-indexing-bar-track {
   width: 100%;
-  max-width: 220px;
   height: 6px;
   border-radius: 3px;
   background: var(--background-modifier-border);

@@ -5,6 +5,7 @@ import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
 import { renderIndexingStatus } from "../ui/indexing-status";
+import { renderItemList } from "../ui/item-list";
 import { computeTagSuggestions } from "./tag-suggestions";
 import { computeFolderSuggestions } from "./folder-suggestions";
 import { analyseSplit, NoteSplitModal, type SplitAnalysis } from "./note-split";
@@ -143,13 +144,11 @@ export class SimilarNotesView extends ItemView {
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Similar notes" });
     const list = container.createEl("div", { cls: "fyp-similar-list" });
-    for (const r of results) {
-      const item = list.createEl("div", { cls: "fyp-similar-item" });
+    renderItemList(list, "fyp-similar-item", results, (item, r) => {
       item.createEl("span", { cls: "fyp-similar-title", text: r.file.basename });
-      makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3) });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
-    }
+    }, (r) => this.app.workspace.getLeaf(false).openFile(r.file));
   }
 
   private async checkSplit(file: TFile): Promise<SplitAnalysis | null> {
@@ -254,15 +253,13 @@ export class SimilarNotesView extends ItemView {
 
     container.createEl("h3", { cls: "fyp-similar-header", text: "Try revisiting..." });
     const list = container.createEl("div", { cls: "fyp-resurface-list" });
-    for (const r of resurfaceResults) {
-      const item = list.createEl("div", { cls: "fyp-resurface-item" });
+    renderItemList(list, "fyp-resurface-item", resurfaceResults, (item, r) => {
       item.createEl("span", { cls: "fyp-resurface-title", text: r.file.basename });
-      makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", {
         cls: "fyp-similar-score",
         text: `${r.similarity.toFixed(3)}, ${r.daysSince}`,
       });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
-    }
+    }, (r) => this.app.workspace.getLeaf(false).openFile(r.file));
   }
 }

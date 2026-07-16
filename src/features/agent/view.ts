@@ -8,7 +8,7 @@ import type { VaultIndex } from "../../core/vault-index";
 import type { FypSettings } from "../../settings";
 import type FypPlugin from "../../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../../ui/sidebar-switcher";
-import { makeActivatable } from "../../ui/a11y";
+import { renderItemList } from "../../ui/item-list";
 import { ConversationStore } from "./store";
 import { buildRagContext } from "./rag";
 import { makeToolHandlers } from "./tools";
@@ -21,6 +21,41 @@ const SYSTEM_PROMPT = `You are a knowledgeable assistant with access to the user
 You have tools to search and read notes. Use them to find relevant information before answering. Think step-by-step: search for relevant notes, read ones that look useful, follow links if needed, then answer based on what you found.
 
 Always cite note titles when drawing from them. If you cannot find enough information, say so.`;
+
+const PRESETS: { label: string; text: string }[] = [
+  {
+    label: "Find connections",
+    text: "What notes in my vault relate to what I'm currently working on? Are there any unexpected connections I might have missed?",
+  },
+  {
+    label: "Resurface forgotten",
+    text: "What notes have I not visited recently that are relevant to my current work?",
+  },
+  {
+    label: "Suggest links & tags",
+    text: "Based on my current note, what wikilinks to other notes and what tags would you suggest adding?",
+  },
+  {
+    label: "Clean up this note",
+    text: "Review my current note and suggest improvements to its structure and clarity, without changing its meaning.",
+  },
+  {
+    label: "Find overlapping notes",
+    text: "Search my vault for notes that seem to overlap, duplicate, or cover the same ground as each other, so I can consolidate them.",
+  },
+  {
+    label: "Where should this go?",
+    text: "Based on the rest of my vault, where does my current note best fit — an existing folder, tag, or related note it should link to?",
+  },
+  {
+    label: "Quiz me",
+    text: "Quiz me on the key ideas in my current note to help me learn and remember them.",
+  },
+  {
+    label: "Clean up my backlog",
+    text: "Look through my recent notes for ones that look like quick, messy captures I never went back to clean up, and tell me what needs attention.",
+  },
+];
 
 export class AgentView extends ItemView {
   private index: VaultIndex;
@@ -66,6 +101,20 @@ export class AgentView extends ItemView {
       }
     });
 
+    this.buildActionsBar(container);
+
+    this.historyEl = container.createEl("div", { cls: "fyp-agent-history" });
+    this.historyEl.hide();
+
+    this.messagesEl = container.createEl("div", { cls: "fyp-agent-messages" });
+    this.statusEl = container.createEl("div", { cls: "fyp-agent-status" });
+    this.buildIndexingBanner(container);
+    this.buildInputArea(container);
+
+    await this.renderCurrentConversation();
+  }
+
+  private buildActionsBar(container: HTMLElement): void {
     const actionsBar = container.createEl("div", { cls: "fyp-agent-actions" });
     this.historyBtn = actionsBar.createEl("button", { text: "History", attr: { title: "Browse conversations" } });
     const newBtn = actionsBar.createEl("button", { text: "New", attr: { title: "Start new conversation" } });
@@ -74,59 +123,21 @@ export class AgentView extends ItemView {
     this.historyBtn.addEventListener("click", () => this.toggleHistory());
     newBtn.addEventListener("click", () => this.newConversation());
     compactBtn.addEventListener("click", () => this.runCompaction());
+  }
 
-    this.historyEl = container.createEl("div", { cls: "fyp-agent-history" });
-    this.historyEl.hide();
-
-    this.messagesEl = container.createEl("div", { cls: "fyp-agent-messages" });
-    this.statusEl = container.createEl("div", { cls: "fyp-agent-status" });
-
+  private buildIndexingBanner(container: HTMLElement): void {
     this.indexingBanner = container.createEl("div", {
       cls: "fyp-agent-indexing-banner",
       text: "Vault still indexing. Some functionality might not be available.",
     });
     this.unsubscribeIndexing = this.index.onIndexingChange(() => this.updateIndexingBanner());
     this.updateIndexingBanner();
+  }
 
+  private buildInputArea(container: HTMLElement): void {
     const inputArea = container.createEl("div", { cls: "fyp-agent-input" });
 
     this.presetsEl = inputArea.createEl("div", { cls: "fyp-agent-presets" });
-    const presetsEl = this.presetsEl;
-    const PRESETS: { label: string; text: string }[] = [
-      {
-        label: "Find connections",
-        text: "What notes in my vault relate to what I'm currently working on? Are there any unexpected connections I might have missed?",
-      },
-      {
-        label: "Resurface forgotten",
-        text: "What notes have I not visited recently that are relevant to my current work?",
-      },
-      {
-        label: "Suggest links & tags",
-        text: "Based on my current note, what wikilinks to other notes and what tags would you suggest adding?",
-      },
-      {
-        label: "Clean up this note",
-        text: "Review my current note and suggest improvements to its structure and clarity, without changing its meaning.",
-      },
-      {
-        label: "Find overlapping notes",
-        text: "Search my vault for notes that seem to overlap, duplicate, or cover the same ground as each other, so I can consolidate them.",
-      },
-      {
-        label: "Where should this go?",
-        text: "Based on the rest of my vault, where does my current note best fit — an existing folder, tag, or related note it should link to?",
-      },
-      {
-        label: "Quiz me on this",
-        text: "Quiz me on the key ideas in my current note to help me learn and remember them.",
-      },
-      {
-        label: "Untangle my capture backlog",
-        text: "Look through my recent notes for ones that look like quick, messy captures I never went back to clean up, and tell me what needs attention.",
-      },
-    ];
-
     this.inputEl = inputArea.createEl("textarea", {
       cls: "fyp-agent-textarea",
       attr: { placeholder: "Ask anything about your vault…", rows: "3" },
@@ -135,18 +146,10 @@ export class AgentView extends ItemView {
 
     const syncPresets = () => {
       const hasMessages = this.store.active.messages.length > 0;
-      presetsEl.style.display = (hasMessages || this.inputEl.value) ? "none" : "";
+      this.presetsEl.style.display = (hasMessages || this.inputEl.value) ? "none" : "";
     };
     this.syncPresets = syncPresets;
-
-    for (const preset of PRESETS) {
-      const btn = presetsEl.createEl("button", { cls: "fyp-preset-btn", text: preset.label });
-      btn.addEventListener("click", () => {
-        this.inputEl.value = preset.text;
-        presetsEl.style.display = "none";
-        this.inputEl.focus();
-      });
-    }
+    this.buildPresetButtons();
 
     const send = () => this.handleSubmit();
     sendBtn.addEventListener("click", send);
@@ -154,8 +157,17 @@ export class AgentView extends ItemView {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
     });
     this.inputEl.addEventListener("input", syncPresets);
+  }
 
-    await this.renderCurrentConversation();
+  private buildPresetButtons(): void {
+    for (const preset of PRESETS) {
+      const btn = this.presetsEl.createEl("button", { cls: "fyp-preset-btn", text: preset.label });
+      btn.addEventListener("click", () => {
+        this.inputEl.value = preset.text;
+        this.presetsEl.style.display = "none";
+        this.inputEl.focus();
+      });
+    }
   }
 
   private updateIndexingBanner(): void {
@@ -198,22 +210,22 @@ export class AgentView extends ItemView {
       this.historyEl.createEl("div", { cls: "fyp-muted", text: "No conversations yet." });
       return;
     }
-    for (let i = all.length - 1; i >= 0; i--) {
-      const conv = all[i];
-      if (conv.messages.length === 0) continue;
+    const entries = all
+      .map((conv, i) => ({ conv, i }))
+      .filter(({ conv }) => conv.messages.length > 0)
+      .reverse();
+
+    renderItemList(this.historyEl, "fyp-history-item", entries, (item, { conv, i }) => {
+      if (i === this.store.activeIndex) item.addClass("active");
       const firstUser = conv.messages.find((m) => m.role === "user");
       const raw = typeof firstUser?.content === "string" ? firstUser.content : "";
       const preview = raw.length > 60 ? raw.slice(0, 60) + "…" : raw || "New conversation";
       const date = new Date(conv.created).toLocaleString(undefined, {
         month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
       });
-      const item = this.historyEl.createEl("div", {
-        cls: "fyp-history-item" + (i === this.store.activeIndex ? " active" : ""),
-      });
       item.createEl("div", { cls: "fyp-history-preview", text: preview });
       item.createEl("div", { cls: "fyp-history-date", text: date });
-      makeActivatable(item, () => this.loadConversation(i));
-    }
+    }, ({ i }) => this.loadConversation(i));
   }
 
   private async renderCurrentConversation(): Promise<void> {

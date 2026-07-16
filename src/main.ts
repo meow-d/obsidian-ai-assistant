@@ -1,4 +1,4 @@
-import { Modal, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { log, error } from "./core/log";
 import { type FypSettings, FypSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { VaultIndex } from "./core/vault-index";
@@ -8,9 +8,9 @@ import { AgentView, AGENT_VIEW } from "./features/agent/index";
 import { SearchView, SEARCH_VIEW } from "./features/search";
 import { OrphanRescuerView, ORPHAN_RESCUER_VIEW } from "./features/orphan-rescuer";
 import { createWikilinkCandidateExtension } from "./features/wikilink-suggestions";
-import { analyseSplit, NoteSplitModal } from "./features/note-split";
 import { registerQuoteInChat } from "./features/quote-in-chat";
 import { scanVaultWikilinks } from "./features/vault-wikilink-scan";
+import { runDevSplitDebug } from "./features/dev-split-debug";
 import { WelcomeModal } from "./ui/welcome-modal";
 import { IndexingProgress } from "./ui/indexing-progress";
 
@@ -93,7 +93,7 @@ export default class FypPlugin extends Plugin {
     this.addCommand({
       id: "dev-note-split-bulk-debug",
       name: "[DEV] Bulk note-split analysis on entire vault",
-      callback: () => this.runDevSplitDebug(),
+      callback: () => runDevSplitDebug(this.app, this.settings),
     });
 
     // Editor context menu: quote in agent chat
@@ -232,128 +232,4 @@ export default class FypPlugin extends Plugin {
     await this.saveData({ ...this.settings, agentConversations: this.storedConversations });
   }
 
-  // DEV: comment out before shipping
-  private async runDevSplitDebug(): Promise<void> {
-    const files = this.app.vault.getMarkdownFiles();
-    new Notice(`[DEV] Analysing ${files.length} notes for split candidates…`);
-
-    interface DebugEntry {
-      file: TFile;
-      status: "triggered" | "below-threshold" | "too-short" | "error";
-      score?: number;
-      clusterCount?: number;
-      intraSim?: number;
-      interSim?: number;
-      balance?: number;
-      sentenceCount?: number;
-      error?: string;
-    }
-
-    const results: DebugEntry[] = [];
-
-    for (const file of files) {
-      try {
-        const text = await this.app.vault.cachedRead(file);
-        const analysis = await analyseSplit(text);
-        if (analysis) {
-          results.push({
-            file,
-            status: "triggered",
-            score: analysis.score,
-            clusterCount: analysis.clusters.length,
-            intraSim: analysis.intraSim,
-            interSim: analysis.interSim,
-            balance: analysis.balance,
-            sentenceCount: analysis.clusters.reduce((s, c) => s + c.sentences.length, 0),
-          });
-        } else {
-          results.push({ file, status: "below-threshold" });
-        }
-      } catch (e) {
-        results.push({ file, status: "error", error: (e as Error).message });
-      }
-    }
-
-    new DevSplitDebugModal(this.app, results, this.settings).open();
-  }
-
-}
-
-class DevSplitDebugModal extends Modal {
-  private results: Array<{
-    file: TFile;
-    status: "triggered" | "below-threshold" | "too-short" | "error";
-    score?: number;
-    clusterCount?: number;
-    intraSim?: number;
-    interSim?: number;
-    balance?: number;
-    sentenceCount?: number;
-    error?: string;
-  }>;
-  private settings: import("./settings").FypSettings;
-
-  constructor(app: import("obsidian").App, results: DevSplitDebugModal["results"], settings: DevSplitDebugModal["settings"]) {
-    super(app);
-    this.results = results;
-    this.settings = settings;
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    this.modalEl.style.width = "800px";
-    this.modalEl.style.maxHeight = "80vh";
-    this.modalEl.style.overflowY = "auto";
-
-    const triggered = this.results.filter(r => r.status === "triggered");
-    const errors = this.results.filter(r => r.status === "error");
-
-    contentEl.createEl("h2", { text: "[DEV] Note split bulk analysis" });
-    contentEl.createEl("p", {
-      text: `${this.results.length} notes analysed · ${triggered.length} triggered · ${errors.length} errors`,
-      cls: "fyp-modal-desc",
-    });
-
-    if (triggered.length > 0) {
-      contentEl.createEl("h3", { text: "Triggered" });
-      const table = contentEl.createEl("table");
-      const head = table.createEl("thead").createEl("tr");
-      for (const col of ["Note", "Score", "Clusters", "Sentences", "Intra sim", "Inter sim", "Balance", "Actions"]) {
-        head.createEl("th", { text: col });
-      }
-      const body = table.createEl("tbody");
-      for (const r of triggered.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))) {
-        const row = body.createEl("tr");
-        row.createEl("td", { text: r.file.basename });
-        row.createEl("td", { text: (r.score ?? 0).toFixed(3) });
-        row.createEl("td", { text: String(r.clusterCount ?? 0) });
-        row.createEl("td", { text: String(r.sentenceCount ?? 0) });
-        row.createEl("td", { text: (r.intraSim ?? 0).toFixed(3) });
-        row.createEl("td", { text: (r.interSim ?? 0).toFixed(3) });
-        row.createEl("td", { text: (r.balance ?? 0).toFixed(3) });
-        const actionsTd = row.createEl("td");
-        const openBtn = actionsTd.createEl("button", { text: "Open" });
-        openBtn.addEventListener("click", () => this.app.workspace.getLeaf(false).openFile(r.file));
-        const splitBtn = actionsTd.createEl("button", { text: "Split…" });
-        splitBtn.addEventListener("click", async () => {
-          const text = await this.app.vault.cachedRead(r.file);
-          const analysis = await analyseSplit(text);
-          if (analysis) new NoteSplitModal(this.app, r.file, analysis, this.settings).open();
-        });
-      }
-    }
-
-    if (errors.length > 0) {
-      contentEl.createEl("h3", { text: "Errors" });
-      for (const r of errors) {
-        const row = contentEl.createEl("div");
-        row.createEl("strong", { text: r.file.path });
-        row.createEl("span", { text: `: ${r.error}` });
-      }
-    }
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-  }
 }

@@ -8,6 +8,67 @@ import screenshotOrphan from "../assets/screenshot_orphan.webp";
 
 const TOTAL_PAGES = 8;
 
+interface SimplePage {
+  title: string;
+  paragraphs: { text: string; cls?: string }[];
+  image?: string;
+}
+
+/** Pages that are just static text/screenshot; page 2 (settings) is built separately. */
+const SIMPLE_PAGES: Record<number, SimplePage> = {
+  1: {
+    title: "Welcome to Wikilink AI Assistant (tenative name)!",
+    paragraphs: [
+      { text: "This plugin brings AI-powered knowledge management to your Obsidian vault. It uses custom fine-tuned embedding models to understand your notes and surface connections you might have missed." },
+      { text: "This short guide will walk you through configuration and the main features." },
+    ],
+  },
+  3: {
+    title: "Smart Suggestions Sidebar",
+    paragraphs: [
+      { text: "The Smart Suggestions sidebar automatically shows similar notes, tag suggestions, folder suggestions, and more." },
+    ],
+    image: screenshotSmartSuggestions,
+  },
+  4: {
+    title: "AI Agent",
+    paragraphs: [
+      { text: "The AI Agent has full access to your vault. Ask it questions, request summaries, or have it help you write and link notes." },
+      { text: "You can also quote selected text from a note directly into the agent chat via the right-click context menu.", cls: "fyp-modal-desc" },
+    ],
+    image: screenshotAgent,
+  },
+  5: {
+    title: "Wikilink Suggestions",
+    paragraphs: [
+      { text: "As you type, the plugin highlights words and phrases that match other notes in your vault. Click a highlight to insert a wikilink." },
+      { text: "You can also run \"Scan vault for wikilink suggestions\" from the command palette to review all candidate links across every note at once.", cls: "fyp-modal-desc" },
+    ],
+    image: screenshotInlineSuggestions,
+  },
+  6: {
+    title: "Natural Language Search",
+    paragraphs: [
+      { text: "Search your vault by meaning, not just keywords. Describe what you're looking for and the plugin finds notes that match semantically, even if they don't share exact wording." },
+    ],
+    image: screenshotSearch,
+  },
+  7: {
+    title: "Orphan Note Rescuer",
+    paragraphs: [
+      { text: "Notes with no incoming or outgoing links are easy to lose track of. The Orphan Note Rescuer finds these isolated notes and suggests related notes to link them to." },
+    ],
+    image: screenshotOrphan,
+  },
+  8: {
+    title: "You're all set!",
+    paragraphs: [
+      { text: "After you click Finish, the plugin will begin indexing your vault. This may take a few minutes to hours depending on the size of your vault." },
+      { text: "You can re-open this guide any time from Settings > FYP Plugin > Show welcome guide on startup.", cls: "fyp-modal-desc" },
+    ],
+  },
+};
+
 export class WelcomeModal extends Modal {
   private settings: FypSettings;
   private onSetupComplete: () => Promise<void>;
@@ -27,33 +88,27 @@ export class WelcomeModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    const pages: Record<number, () => void> = {
-      1: () => this.renderPage1(),
-      2: () => this.renderPage2(),
-      3: () => this.renderPage3(),
-      4: () => this.renderPage4(),
-      5: () => this.renderPage5(),
-      6: () => this.renderPage6(),
-      7: () => this.renderPage7(),
-      8: () => this.renderPage8(),
-    };
+    if (this.page === 2) {
+      this.renderSettingsPage();
+    } else {
+      this.renderSimplePage(SIMPLE_PAGES[this.page]);
+    }
 
-    pages[this.page]?.();
     this.renderNav();
   }
 
-  private renderPage1(): void {
+  private renderSimplePage(page: SimplePage): void {
     const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Welcome to Wikilink AI Assistant (tenative name)!" });
-    contentEl.createEl("p", {
-      text: "This plugin brings AI-powered knowledge management to your Obsidian vault. It uses custom fine-tuned embedding models to understand your notes and surface connections you might have missed.",
-    });
-    contentEl.createEl("p", {
-      text: "This short guide will walk you through configuration and the main features.",
-    });
+    contentEl.createEl("h2", { text: page.title });
+    for (const p of page.paragraphs) {
+      contentEl.createEl("p", { text: p.text, cls: p.cls });
+    }
+    if (page.image) {
+      contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: page.image } });
+    }
   }
 
-  private renderPage2(): void {
+  private renderSettingsPage(): void {
     const { contentEl } = this;
     contentEl.createEl("h2", { text: "Configure Options" });
 
@@ -105,71 +160,6 @@ export class WelcomeModal extends Modal {
             .onChange((v) => { this.settings.llmModel = v; })
         );
     }
-  }
-
-  private renderPage3(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Smart Suggestions Sidebar" });
-    contentEl.createEl("p", {
-      text: "The Smart Suggestions sidebar automatically shows similar notes, tag suggestions, folder suggestions, and more.",
-    });
-    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotSmartSuggestions } });
-  }
-
-  private renderPage4(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "AI Agent" });
-    contentEl.createEl("p", {
-      text: "The AI Agent has full access to your vault. Ask it questions, request summaries, or have it help you write and link notes.",
-    });
-    contentEl.createEl("p", {
-      cls: "fyp-modal-desc",
-      text: "You can also quote selected text from a note directly into the agent chat via the right-click context menu.",
-    });
-    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotAgent } });
-  }
-
-  private renderPage5(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Wikilink Suggestions" });
-    contentEl.createEl("p", {
-      text: "As you type, the plugin highlights words and phrases that match other notes in your vault. Click a highlight to insert a wikilink.",
-    });
-    contentEl.createEl("p", {
-      cls: "fyp-modal-desc",
-      text: "You can also run \"Scan vault for wikilink suggestions\" from the command palette to review all candidate links across every note at once.",
-    });
-    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotInlineSuggestions } });
-  }
-
-  private renderPage6(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Natural Language Search" });
-    contentEl.createEl("p", {
-      text: "Search your vault by meaning, not just keywords. Describe what you're looking for and the plugin finds notes that match semantically, even if they don't share exact wording.",
-    });
-    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotSearch } });
-  }
-
-  private renderPage7(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Orphan Note Rescuer" });
-    contentEl.createEl("p", {
-      text: "Notes with no incoming or outgoing links are easy to lose track of. The Orphan Note Rescuer finds these isolated notes and suggests related notes to link them to.",
-    });
-    contentEl.createEl("img", { cls: "fyp-modal-screenshot", attr: { src: screenshotOrphan } });
-  }
-
-  private renderPage8(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "You're all set!" });
-    contentEl.createEl("p", {
-      text: "After you click Finish, the plugin will begin indexing your vault. This may take a few minutes to hours depending on the size of your vault.",
-    });
-    contentEl.createEl("p", {
-      cls: "fyp-modal-desc",
-      text: "You can re-open this guide any time from Settings > FYP Plugin > Show welcome guide on startup.",
-    });
   }
 
   private renderNav(): void {

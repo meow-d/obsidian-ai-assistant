@@ -146,8 +146,8 @@ export class SimilarNotesView extends ItemView {
     const list = container.createEl("div", { cls: "fyp-similar-list" });
     for (const r of results) {
       const item = list.createEl("div", { cls: "fyp-similar-item" });
-      const link = item.createEl("a", { cls: "fyp-similar-title", text: r.file.basename });
-      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
+      item.createEl("span", { cls: "fyp-similar-title", text: r.file.basename });
+      makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
@@ -253,7 +253,7 @@ export class SimilarNotesView extends ItemView {
   private renderResurfacing(container: HTMLElement, resurfaceResults: ResurfaceResult[]): void {
     if (resurfaceResults.length === 0) return;
 
-    container.createEl("h3", { cls: "fyp-header", text: "Try revisiting..." });
+    container.createEl("h3", { cls: "fyp-similar-header", text: "Try revisiting..." });
     const list = container.createEl("div", { cls: "fyp-resurface-list" });
     for (const r of resurfaceResults) {
       const item = list.createEl("div", { cls: "fyp-resurface-item" });

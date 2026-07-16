@@ -19,7 +19,6 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 8px;
 }
 
 .fyp-orphan-suggestions {
@@ -175,9 +174,9 @@
 
 /* Semantic search sidebar */
 .fyp-search-input {
-  width: calc(100% - 16px);
+  width: 100%;
   padding: 7px 10px;
-  margin: 8px 8px 10px;
+  margin: 8px 0 10px;
   box-sizing: border-box;
   border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
@@ -204,7 +203,7 @@
 }
 
 .fyp-orphan-section {
-  margin: 10px 8px;
+  margin: 10px 0;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
@@ -431,7 +430,7 @@
 }
 
 .fyp-agent-actions button.active {
-  color: var(--interactive-accent);
+  background: var(--interactive-accent);
 }
 
 .fyp-agent-empty {
@@ -543,7 +542,6 @@
 .fyp-sidebar-switcher {
   display: flex;
   gap: 2px;
-  margin: 8px 8px 4px;
   padding: 3px;
   border-radius: 20px;
   background: var(--background-secondary);

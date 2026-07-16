@@ -89,7 +89,7 @@ export class OrphanRescuerView extends ItemView {
 
     container.createEl("h2", { text: "Orphan notes" });
     container.createEl("p", {
-      text: "These orphan notes don't have any incoming or outgoing links. Here are similar notes to help you get started with linking them!",
+      text: "Orphan notes don't have any incoming or outgoing links. Here are their similar notes to help you get started with linking them!",
       cls: "fyp-modal-desc",
     });
 

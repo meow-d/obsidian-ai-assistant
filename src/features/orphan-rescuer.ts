@@ -46,18 +46,28 @@ export class OrphanRescuerView extends ItemView {
       return;
     }
 
-    const loadingEl = container.createEl("p", { text: "Scanning vault for orphan notes…", cls: "fyp-muted" });
-    await this.loadOrphans();
-    loadingEl.remove();
+    const panel = container.createEl("div", { cls: "fyp-indexing-panel" });
+    panel.createEl("div", { cls: "fyp-indexing-spinner" });
+    const detail = panel.createEl("p", { cls: "fyp-indexing-detail", text: "Scanning vault for orphan notes…" });
+
+    await this.loadOrphans((current, total) => {
+      detail.setText(`Scanning orphan notes… (${current}/${total})`);
+    });
+
+    panel.remove();
     await this.render(container);
   }
 
-  private async loadOrphans(): Promise<void> {
+  private async loadOrphans(onProgress: (current: number, total: number) => void): Promise<void> {
     const files = this.app.vault.getMarkdownFiles();
     const orphans = files.filter((f) => this.index.isOrphan(f));
 
     this.entries = [];
-    for (const file of orphans) {
+    for (let i = 0; i < orphans.length; i++) {
+      const file = orphans[i];
+      onProgress(i, orphans.length);
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+
       const emb = await this.index.getEmbedding(file.path);
       if (!emb) continue;
       const suggestions = (await this.index.searchByEmbedding(emb, this.topK, file.path))

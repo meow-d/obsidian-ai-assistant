@@ -205,6 +205,8 @@ export class VaultIndex {
         this.pathCache.add(path);
       }
 
+      await this.cacheManager?.saveModelPath(this.modelPath);
+
       log(`[index] loaded ${cachedNotes.size} from cache, checking for stale entries`);
       // Remove files that no longer exist in vault
       const filePaths = new Set(files.map((f) => f.path));
@@ -234,7 +236,6 @@ export class VaultIndex {
 
       this.buildWikilinkGraph(files);
 
-      await this.cacheManager?.saveModelPath(this.modelPath);
       this.indexSize = await this.cacheManager?.getNoteCount() ?? 0;
       log(`[index] build() finished in ${(performance.now() - t0).toFixed(0)}ms, ${this.indexSize} notes in cache`);
     } finally {

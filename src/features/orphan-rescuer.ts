@@ -108,7 +108,7 @@ export class OrphanRescuerView extends ItemView {
         const item = list.createEl("div", { cls: "fyp-orphan-suggestion-item" });
         const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: r.file.basename });
         makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
-        item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+        item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3)});
       }
     }
   }

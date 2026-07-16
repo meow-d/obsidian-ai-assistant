@@ -36,8 +36,8 @@ class VaultWikilinkModal extends Modal {
       for (const s of group) {
         const row = section.createEl("div", { cls: "fyp-orphan-row" });
         row.createEl("code", { text: s.phrase });
-        row.createEl("span", { text: ` → [[${s.targetFile.basename}]]`, cls: "fyp-similar-score" });
-        row.createEl("span", { text: ` (${s.score.toFixed(2)})`, cls: "fyp-similar-score" });
+        row.createEl("span", { text: `link to [[${s.targetFile.basename}]]`, cls: "fyp-similar-score" });
+        row.createEl("span", { text: s.score.toFixed(2), cls: "fyp-similar-score" });
 
         const btn = row.createEl("button", { text: "Insert link" });
         btn.addEventListener("click", async () => {

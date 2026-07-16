@@ -147,7 +147,7 @@ export class SimilarNotesView extends ItemView {
       const item = list.createEl("div", { cls: "fyp-similar-item" });
       item.createEl("span", { cls: "fyp-similar-title", text: r.file.basename });
       makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
-      item.createEl("span", { cls: "fyp-similar-score", text: ` (${r.score.toFixed(3)})` });
+      item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3) });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }
   }
@@ -260,7 +260,7 @@ export class SimilarNotesView extends ItemView {
       makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", {
         cls: "fyp-similar-score",
-        text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,
+        text: `${r.similarity.toFixed(3)}, ${r.daysSince}`,
       });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });
     }

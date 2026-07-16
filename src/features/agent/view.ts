@@ -109,6 +109,22 @@ export class AgentView extends ItemView {
         label: "Clean up this note",
         text: "Review my current note and suggest improvements to its structure and clarity, without changing its meaning.",
       },
+      {
+        label: "Find overlapping notes",
+        text: "Search my vault for notes that seem to overlap, duplicate, or cover the same ground as each other, so I can consolidate them.",
+      },
+      {
+        label: "Where should this go?",
+        text: "Based on the rest of my vault, where does my current note best fit — an existing folder, tag, or related note it should link to?",
+      },
+      {
+        label: "Quiz me on this",
+        text: "Quiz me on the key ideas in my current note to help me learn and remember them.",
+      },
+      {
+        label: "Untangle my capture backlog",
+        text: "Look through my recent notes for ones that look like quick, messy captures I never went back to clean up, and tell me what needs attention.",
+      },
     ];
 
     this.inputEl = inputArea.createEl("textarea", {

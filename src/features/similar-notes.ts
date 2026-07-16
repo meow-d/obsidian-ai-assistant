@@ -256,8 +256,8 @@ export class SimilarNotesView extends ItemView {
     const list = container.createEl("div", { cls: "fyp-resurface-list" });
     for (const r of resurfaceResults) {
       const item = list.createEl("div", { cls: "fyp-resurface-item" });
-      const link = item.createEl("a", { cls: "fyp-resurface-title", text: r.file.basename });
-      makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
+      item.createEl("span", { cls: "fyp-resurface-title", text: r.file.basename });
+      makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", {
         cls: "fyp-similar-score",
         text: `  (${r.similarity.toFixed(3)},  ${r.daysSince}d ago)`,

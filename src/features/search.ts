@@ -13,17 +13,15 @@ export class SearchView extends ItemView {
   private index: VaultIndex;
   private topK: number;
   private resultsEl!: HTMLElement;
-  private plugin: FypPlugin;
   private results: SearchResult[] = [];
   private selectedIndex = -1;
   private searchGeneration = 0;
   private unsubscribeIndexing: (() => void) | null = null;
 
-  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
+  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, _plugin: FypPlugin) {
     super(leaf);
     this.index = index;
     this.topK = topK;
-    this.plugin = plugin;
   }
 
   getViewType(): string { return SEARCH_VIEW; }
@@ -36,8 +34,7 @@ export class SearchView extends ItemView {
 
     createSidebarSwitcher(container, SIDEBAR_VIEWS.SEARCH, (viewType) => {
       if (viewType !== SIDEBAR_VIEWS.SEARCH) {
-        this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.SEARCH);
-        this.plugin.activateViewFromSwitcher(viewType);
+        this.leaf.setViewState({ type: viewType, active: true });
       }
     });
 

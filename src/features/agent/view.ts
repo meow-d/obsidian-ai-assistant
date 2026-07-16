@@ -61,8 +61,7 @@ export class AgentView extends ItemView {
 
     createSidebarSwitcher(container, SIDEBAR_VIEWS.AGENT, (viewType) => {
       if (viewType !== SIDEBAR_VIEWS.AGENT) {
-        this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.AGENT);
-        this.plugin.activateViewFromSwitcher(viewType);
+        this.leaf.setViewState({ type: viewType, active: true });
       }
     });
 

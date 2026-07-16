@@ -15,15 +15,13 @@ interface OrphanEntry {
 export class OrphanRescuerView extends ItemView {
   private index: VaultIndex;
   private topK: number;
-  private plugin: FypPlugin;
   private entries: OrphanEntry[] = [];
   private unsubscribeIndexing: (() => void) | null = null;
 
-  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
+  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, _plugin: FypPlugin) {
     super(leaf);
     this.index = index;
     this.topK = topK;
-    this.plugin = plugin;
   }
 
   getViewType(): string { return ORPHAN_RESCUER_VIEW; }
@@ -36,8 +34,7 @@ export class OrphanRescuerView extends ItemView {
 
     createSidebarSwitcher(container, SIDEBAR_VIEWS.ORPHAN_RESCUER, (viewType) => {
       if (viewType !== SIDEBAR_VIEWS.ORPHAN_RESCUER) {
-        this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.ORPHAN_RESCUER);
-        this.plugin.activateViewFromSwitcher(viewType);
+        this.leaf.setViewState({ type: viewType, active: true });
       }
     });
 
@@ -98,8 +95,7 @@ export class OrphanRescuerView extends ItemView {
       const heading = section.createEl("a", { cls: "fyp-similar-title", text: file.basename });
       makeActivatable(heading, () => {
         this.app.workspace.getLeaf(false).openFile(file);
-        this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.ORPHAN_RESCUER);
-        this.plugin.activateViewFromSwitcher(SIDEBAR_VIEWS.SIMILAR_NOTES);
+        this.leaf.setViewState({ type: SIDEBAR_VIEWS.SIMILAR_NOTES, active: true });
       });
 
       if (suggestions.length === 0) {

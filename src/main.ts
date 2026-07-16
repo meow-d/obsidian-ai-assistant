@@ -129,8 +129,12 @@ export default class FypPlugin extends Plugin {
 
 
     this.app.workspace.onLayoutReady(async () => {
-      // Open similar notes panel by default
-      if (this.app.workspace.getLeavesOfType(SIMILAR_NOTES_VIEW).length === 0) {
+      // Open similar notes panel by default, but don't steal the sidebar
+      // if one of our other views is already open there.
+      const anyFypViewOpen = [SIMILAR_NOTES_VIEW, AGENT_VIEW, SEARCH_VIEW, ORPHAN_RESCUER_VIEW].some(
+        (type) => this.app.workspace.getLeavesOfType(type).length > 0
+      );
+      if (!anyFypViewOpen) {
         await this.activateView(SIMILAR_NOTES_VIEW);
       }
 

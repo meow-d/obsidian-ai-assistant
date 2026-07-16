@@ -55,8 +55,7 @@ export class SimilarNotesView extends ItemView {
 
     createSidebarSwitcher(container, SIDEBAR_VIEWS.SIMILAR_NOTES, (viewType) => {
       if (viewType !== SIDEBAR_VIEWS.SIMILAR_NOTES) {
-        this.app.workspace.detachLeavesOfType(SIDEBAR_VIEWS.SIMILAR_NOTES);
-        this.plugin.activateViewFromSwitcher(viewType);
+        this.leaf.setViewState({ type: viewType, active: true });
       }
     });
 

@@ -39,6 +39,7 @@ export class AgentView extends ItemView {
   private sending = false;
   private indexingBanner!: HTMLElement;
   private unsubscribeIndexing: (() => void) | null = null;
+  private syncPresets: () => void = () => {};
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, app: App, settings: FypSettings, plugin: FypPlugin) {
     super(leaf);
@@ -117,8 +118,10 @@ export class AgentView extends ItemView {
     const sendBtn = inputArea.createEl("button", { text: "Send", cls: "mod-cta" });
 
     const syncPresets = () => {
-      presetsEl.style.display = this.inputEl.value ? "none" : "";
+      const hasMessages = this.store.active.messages.length > 0;
+      presetsEl.style.display = (hasMessages || this.inputEl.value) ? "none" : "";
     };
+    this.syncPresets = syncPresets;
 
     for (const preset of PRESETS) {
       const btn = presetsEl.createEl("button", { cls: "fyp-preset-btn", text: preset.label });
@@ -251,6 +254,8 @@ export class AgentView extends ItemView {
         if (chip) this.setToolResult(chip, typeof msg.content === "string" ? msg.content : "");
       }
     }
+
+    this.syncPresets();
   }
 
   private async loadConversation(idx: number): Promise<void> {
@@ -396,7 +401,7 @@ export class AgentView extends ItemView {
     this.sending = false;
     this.inputEl.disabled = false;
     this.inputEl.focus();
-    this.presetsEl.style.display = "";
+    this.syncPresets();
   }
 
   private async renderMarkdown(el: HTMLElement, text: string): Promise<void> {

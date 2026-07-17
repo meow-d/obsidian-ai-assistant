@@ -1,4 +1,4 @@
-import { ItemView, TFile, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, TFile, WorkspaceLeaf } from "obsidian";
 import type { VaultIndex, SearchResult } from "../core/vault-index";
 import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
@@ -13,12 +13,83 @@ interface OrphanEntry {
   suggestions: SearchResult[];
 }
 
+type ScanStatus = "idle" | "scanning" | "done" | "cancelled";
+
+/**
+ * Owns the orphan scan itself, outside of any view instance. Obsidian creates a
+ * fresh OrphanRescuerView every time the sidebar switches back to this tab, so
+ * caching results (and letting an in-progress scan keep running while the user
+ * looks at another tab) requires state that outlives the view. This is a
+ * per-plugin-load singleton: results persist for the session but reset on
+ * reload, matching "save results per session" rather than persisting to disk.
+ */
+class OrphanScanState {
+  status: ScanStatus = "idle";
+  entries: OrphanEntry[] = [];
+  current = 0;
+  total = 0;
+
+  private cancelRequested = false;
+  private listeners = new Set<() => void>();
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private notify(): void {
+    for (const fn of this.listeners) fn();
+  }
+
+  requestCancel(): void {
+    this.cancelRequested = true;
+  }
+
+  async run(app: App, index: VaultIndex, topK: number): Promise<void> {
+    this.status = "scanning";
+    this.cancelRequested = false;
+    this.entries = [];
+    this.current = 0;
+
+    const files = app.vault.getMarkdownFiles();
+    const orphans = files.filter((f) => index.isOrphan(f));
+    this.total = orphans.length;
+    this.notify();
+
+    for (let i = 0; i < orphans.length; i++) {
+      if (this.cancelRequested) {
+        this.status = "cancelled";
+        this.notify();
+        return;
+      }
+
+      const file = orphans[i];
+      this.current = i;
+      this.notify();
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+
+      const emb = await index.getEmbedding(file.path);
+      if (emb) {
+        const suggestions = (await index.searchByEmbedding(emb, topK, file.path))
+          .filter((r) => r.score > 0.5)
+          .slice(0, 3);
+        this.entries.push({ file, suggestions });
+      }
+    }
+
+    this.status = this.cancelRequested ? "cancelled" : "done";
+    this.notify();
+  }
+}
+
+const scanState = new OrphanScanState();
+
 export class OrphanRescuerView extends ItemView {
   private index: VaultIndex;
   private topK: number;
   private plugin: FypPlugin;
-  private entries: OrphanEntry[] = [];
   private unsubscribeIndexing: (() => void) | null = null;
+  private unsubscribeScan: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
@@ -46,54 +117,74 @@ export class OrphanRescuerView extends ItemView {
       return;
     }
 
-    const panel = container.createEl("div", { cls: "fyp-indexing-panel" });
-    panel.createEl("div", { cls: "fyp-indexing-spinner" });
-    const detail = panel.createEl("p", { cls: "fyp-indexing-detail", text: "Scanning vault for orphan notes…" });
+    this.unsubscribeScan = scanState.subscribe(() => this.render(container));
 
-    await this.loadOrphans((current, total) => {
-      detail.setText(`Scanning orphan notes… (${current}/${total})`);
-    });
-
-    panel.remove();
-    await this.render(container);
-  }
-
-  private async loadOrphans(onProgress: (current: number, total: number) => void): Promise<void> {
-    const files = this.app.vault.getMarkdownFiles();
-    const orphans = files.filter((f) => this.index.isOrphan(f));
-
-    this.entries = [];
-    for (let i = 0; i < orphans.length; i++) {
-      const file = orphans[i];
-      onProgress(i, orphans.length);
-      await new Promise((resolve) => window.requestAnimationFrame(resolve));
-
-      const emb = await this.index.getEmbedding(file.path);
-      if (!emb) continue;
-      const suggestions = (await this.index.searchByEmbedding(emb, this.topK, file.path))
-        .filter((r) => r.score > 0.5)
-        .slice(0, 3);
-      this.entries.push({ file, suggestions });
+    if (scanState.status === "idle") {
+      // Fire-and-forget: the scan runs on the module-level singleton, so it
+      // keeps going even if the user switches away and this view is torn down.
+      void scanState.run(this.app, this.index, this.topK);
     }
+
+    this.render(container);
   }
 
-  private async render(container: HTMLElement): Promise<void> {
+  private startRescan(): void {
+    void scanState.run(this.app, this.index, this.topK);
+  }
+
+  private render(container: HTMLElement): void {
     const switcherEl = container.querySelector(".fyp-sidebar-switcher");
     container.empty();
     if (switcherEl) container.appendChild(switcherEl);
 
-    if (this.entries.length === 0) {
+    if (scanState.status === "scanning") {
+      this.renderScanning(container);
+      return;
+    }
+
+    if (scanState.status === "cancelled") {
+      container.createEl("p", { text: "Orphan scan cancelled.", cls: "fyp-muted" });
+      const btn = container.createEl("button", { text: "Scan for orphan notes" });
+      btn.addEventListener("click", () => this.startRescan());
+      return;
+    }
+
+    this.renderResults(container);
+  }
+
+  private renderScanning(container: HTMLElement): void {
+    const panel = container.createEl("div", { cls: "fyp-indexing-panel" });
+    panel.createEl("div", { cls: "fyp-indexing-spinner" });
+    panel.createEl("p", { cls: "fyp-indexing-flavour", text: "Scanning vault for orphan notes…" });
+    panel.createEl("p", {
+      cls: "fyp-indexing-detail",
+      text: `${scanState.current}/${scanState.total} notes`,
+    });
+
+    const cancelBtn = panel.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => {
+      scanState.requestCancel();
+      this.leaf.setViewState({ type: SIDEBAR_VIEWS.SIMILAR_NOTES, active: true });
+    });
+  }
+
+  private renderResults(container: HTMLElement): void {
+    const header = container.createEl("div", { cls: "fyp-orphan-header" });
+    header.createEl("h2", { text: "Orphan notes" });
+    const refreshBtn = header.createEl("button", { text: "Refresh" });
+    refreshBtn.addEventListener("click", () => this.startRescan());
+
+    if (scanState.entries.length === 0) {
       container.createEl("p", { text: "No orphan notes found.", cls: "fyp-muted" });
       return;
     }
 
-    container.createEl("h2", { text: "Orphan notes" });
     container.createEl("p", {
       text: "Orphan notes don't have any incoming or outgoing links. Here are their similar notes to help you get started with linking them!",
       cls: "fyp-modal-desc",
     });
 
-    for (const { file, suggestions } of this.entries) {
+    for (const { file, suggestions } of scanState.entries) {
       const section = container.createEl("div", { cls: "fyp-orphan-section" });
       const heading = section.createEl("a", { cls: "fyp-similar-title", text: getDisplayTitle(this.app, file, this.plugin.settings.showNoteTitles) });
       makeActivatable(heading, () => {
@@ -118,5 +209,6 @@ export class OrphanRescuerView extends ItemView {
 
   async onClose(): Promise<void> {
     this.unsubscribeIndexing?.();
+    this.unsubscribeScan?.();
   }
 }

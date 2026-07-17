@@ -351,11 +351,7 @@ export class VaultIndex {
     });
   }
 
-  /**
-   * Scores many query embeddings in a single pass over the cache instead of one
-   * scan per query. Prefer this over a loop of searchByEmbedding calls when
-   * matching several phrases/notes at once.
-   */
+  /** Scores multiple query embeddings in one pass instead of looping searchByEmbedding. */
   async searchByEmbeddings(embs: number[][], k: number, excludePath?: string): Promise<SearchResult[][]> {
     if (!this.cacheManager) return embs.map(() => []);
     const allResults = await this.cacheManager.queryByEmbeddings(embs, k, excludePath);

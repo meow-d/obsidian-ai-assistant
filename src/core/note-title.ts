@@ -1,11 +1,6 @@
 import { App, TFile } from "obsidian";
 
-/**
- * Resolves the human-readable title for a note: frontmatter `title`, then first
- * alias, then first H1 heading, falling back to the filename. Useful for vaults
- * that use opaque/unique filenames (e.g. timestamp-based IDs) with the real
- * title stored elsewhere.
- */
+/** Resolves a note's display title: frontmatter title, then alias, then first H1, then filename. */
 export function getDisplayTitle(app: App, file: TFile, enabled: boolean): string {
   if (!enabled) return file.basename;
 

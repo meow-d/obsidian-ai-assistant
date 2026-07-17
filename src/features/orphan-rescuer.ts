@@ -16,12 +16,9 @@ interface OrphanEntry {
 type ScanStatus = "idle" | "scanning" | "done" | "cancelled";
 
 /**
- * Owns the orphan scan itself, outside of any view instance. Obsidian creates a
- * fresh OrphanRescuerView every time the sidebar switches back to this tab, so
- * caching results (and letting an in-progress scan keep running while the user
- * looks at another tab) requires state that outlives the view. This is a
- * per-plugin-load singleton: results persist for the session but reset on
- * reload, matching "save results per session" rather than persisting to disk.
+ * Owns the orphan scan outside any view instance, since Obsidian recreates
+ * OrphanRescuerView each time the sidebar switches back to this tab. Session-only:
+ * resets on plugin reload, not persisted to disk.
  */
 class OrphanScanState {
   status: ScanStatus = "idle";
@@ -120,8 +117,7 @@ export class OrphanRescuerView extends ItemView {
     this.unsubscribeScan = scanState.subscribe(() => this.render(container));
 
     if (scanState.status === "idle") {
-      // Fire-and-forget: the scan runs on the module-level singleton, so it
-      // keeps going even if the user switches away and this view is torn down.
+      // Fire-and-forget: keeps running even if the user switches tabs.
       void scanState.run(this.app, this.index, this.topK);
     }
 

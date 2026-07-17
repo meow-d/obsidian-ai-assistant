@@ -23,22 +23,24 @@ export function setEmbedderStatusCallback(cb: ((msg: string) => void) | null): v
   statusCallback = cb;
 }
 
-// The worker can only run one inference call at a time, so requests queue up
-// on the main thread instead of being fired at the worker as soon as they're
-// made. Higher-priority requests (e.g. the Smart Suggestions sidebar) jump
-// ahead of queued lower-priority ones (e.g. background wikilink scanning) -
-// though a request already in flight can't be preempted once dispatched.
+// Worker runs one request at a time; queue and dispatch by priority.
+// A request already in flight can't be preempted.
 let inFlight = false;
 const queue: QueuedRequest[] = [];
+
+/** Index of the highest-priority item; ties go to the earliest (FIFO). Exported for testing. */
+export function pickHighestPriorityIndex(items: Array<{ priority: number }>): number {
+  let bestIdx = 0;
+  for (let i = 1; i < items.length; i++) {
+    if (items[i].priority > items[bestIdx].priority) bestIdx = i;
+  }
+  return bestIdx;
+}
 
 function dispatchNext(): void {
   if (inFlight || queue.length === 0) return;
 
-  let bestIdx = 0;
-  for (let i = 1; i < queue.length; i++) {
-    if (queue[i].priority > queue[bestIdx].priority) bestIdx = i;
-  }
-  const [req] = queue.splice(bestIdx, 1);
+  const [req] = queue.splice(pickHighestPriorityIndex(queue), 1);
 
   inFlight = true;
   const id = nextId++;

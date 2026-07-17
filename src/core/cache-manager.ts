@@ -299,13 +299,7 @@ export class CacheManager {
     return results;
   }
 
-  /**
-   * Scores every chunk row against multiple query embeddings in a single pass
-   * over the DB, instead of one full scan per query. Used by callers that need
-   * a top-k match for many phrases/notes at once (e.g. wikilink-candidate
-   * detection), where scanning once-per-candidate would repeat the same
-   * O(chunk rows) work N times on the main thread.
-   */
+  /** Scores multiple query embeddings in one pass over the DB instead of one scan per query. */
   async queryByEmbeddings(
     embeddings: number[][],
     k: number,

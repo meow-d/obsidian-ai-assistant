@@ -2,6 +2,7 @@ import { App, Modal, Notice, TFile } from "obsidian";
 import { embed, cosine } from "../core/embedder";
 import { sentencize } from "../core/nlp";
 import { callLLMOnce } from "../core/llm";
+import { BallTree } from "../core/ball-tree";
 import type { FypSettings } from "../settings";
 
 const DBSCAN_EPS = 0.30;
@@ -73,8 +74,7 @@ function segmentNote(text: string): Array<{ text: string; headingPath: string }>
 async function embedSentences(units: Array<{ text: string; headingPath: string }>): Promise<SentenceUnit[]> {
   const uncached = units.filter(u => !sentenceEmbCache.has(u.text));
   if (uncached.length > 0) {
-    // High priority: this feeds the Smart Suggestions sidebar directly, so it
-    // shouldn't queue behind background wikilink-candidate scanning.
+    // High priority: feeds the Smart Suggestions sidebar.
     const embeddings = await embed(uncached.map(u => u.text), 10);
     for (let i = 0; i < uncached.length; i++) {
       sentenceEmbCache.set(uncached[i].text, embeddings[i]);
@@ -94,12 +94,12 @@ function dbscan(embeddings: number[][], eps: number, minSamples: number): number
   const visited = new Set<number>();
   let clusterId = 0;
 
+  // Ball tree needs a real metric; convert cosine distance to Euclidean.
+  const tree = new BallTree(embeddings);
+  const euclideanEps = Math.sqrt(2 * eps);
+
   function regionQuery(idx: number): number[] {
-    const result: number[] = [];
-    for (let j = 0; j < n; j++) {
-      if (j !== idx && 1 - cosine(embeddings[idx], embeddings[j]) <= eps) result.push(j);
-    }
-    return result;
+    return tree.radiusQueryByIndex(idx, euclideanEps);
   }
 
   for (let i = 0; i < n; i++) {

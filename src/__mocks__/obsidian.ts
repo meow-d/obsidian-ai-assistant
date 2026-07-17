@@ -1,5 +1,13 @@
 export function normalizePath(p: string): string { return p; }
 
+export function getAllTags(cache: any): string[] | null {
+  const inline: string[] = (cache?.tags ?? []).map((t: any) => t.tag);
+  const fmTags = cache?.frontmatter?.tags;
+  const frontmatter: string[] = Array.isArray(fmTags) ? fmTags : fmTags ? [fmTags] : [];
+  const all = [...inline, ...frontmatter.map((t) => (t.startsWith("#") ? t : `#${t}`))];
+  return all.length > 0 ? Array.from(new Set(all)) : null;
+}
+
 export class TFile {
   path: string = "";
   basename: string = "";

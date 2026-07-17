@@ -2,7 +2,7 @@ import { App, TFile, TFolder } from "obsidian";
 import type { VaultIndex } from "../core/vault-index";
 
 const NEIGHBOUR_K = 30;
-const MIN_SCORE = 0.1;
+const MIN_SCORE = 0.3;
 
 function folderSize(folder: TFolder): number {
   let count = 0;

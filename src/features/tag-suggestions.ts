@@ -1,4 +1,4 @@
-import { App, Modal, Notice, TFile } from "obsidian";
+import { App, getAllTags, Modal, Notice, TFile } from "obsidian";
 import type { VaultIndex } from "../core/vault-index";
 
 class TagSuggestModal extends Modal {
@@ -48,13 +48,16 @@ export async function computeTagSuggestions(
 
   const similar = await index.searchByEmbedding(emb, topK, file.path);
   const currentCache = app.metadataCache.getFileCache(file);
-  const currentTags = new Set<string>((currentCache?.tags ?? []).map((t) => t.tag.replace(/^#/, "")));
+  // getAllTags merges frontmatter `tags:` with inline #tags; cache.tags alone
+  // only covers inline tags and misses frontmatter-only vaults entirely.
+  const currentTags = new Set<string>((currentCache ? getAllTags(currentCache) ?? [] : []).map((t) => t.replace(/^#/, "")));
 
   const tagScores = new Map<string, number>();
   for (const r of similar) {
     const cache = app.metadataCache.getFileCache(r.file);
-    for (const tagObj of cache?.tags ?? []) {
-      const tag = tagObj.tag.replace(/^#/, "");
+    if (!cache) continue;
+    for (const rawTag of getAllTags(cache) ?? []) {
+      const tag = rawTag.replace(/^#/, "");
       if (currentTags.has(tag)) continue;
       tagScores.set(tag, (tagScores.get(tag) ?? 0) + r.score);
     }

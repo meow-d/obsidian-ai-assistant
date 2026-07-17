@@ -6,6 +6,14 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+interface QueuedRequest {
+  type: string;
+  payload?: Record<string, unknown>;
+  priority: number;
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+}
+
 let worker: Worker | null = null;
 let nextId = 0;
 const pending = new Map<number, Pending>();
@@ -13,6 +21,32 @@ let statusCallback: ((msg: string) => void) | null = null;
 
 export function setEmbedderStatusCallback(cb: ((msg: string) => void) | null): void {
   statusCallback = cb;
+}
+
+// The worker can only run one inference call at a time, so requests queue up
+// on the main thread instead of being fired at the worker as soon as they're
+// made. Higher-priority requests (e.g. the Smart Suggestions sidebar) jump
+// ahead of queued lower-priority ones (e.g. background wikilink scanning) -
+// though a request already in flight can't be preempted once dispatched.
+let inFlight = false;
+const queue: QueuedRequest[] = [];
+
+function dispatchNext(): void {
+  if (inFlight || queue.length === 0) return;
+
+  let bestIdx = 0;
+  for (let i = 1; i < queue.length; i++) {
+    if (queue[i].priority > queue[bestIdx].priority) bestIdx = i;
+  }
+  const [req] = queue.splice(bestIdx, 1);
+
+  inFlight = true;
+  const id = nextId++;
+  pending.set(id, {
+    resolve: (v) => { inFlight = false; req.resolve(v); dispatchNext(); },
+    reject: (e) => { inFlight = false; req.reject(e); dispatchNext(); },
+  });
+  getWorker().postMessage({ id, type: req.type, payload: req.payload });
 }
 
 function getWorker(): Worker {
@@ -46,20 +80,20 @@ function getWorker(): Worker {
   return worker;
 }
 
-function send<T>(type: string, payload?: Record<string, unknown>): Promise<T> {
-  const id = nextId++;
+function send<T>(type: string, payload?: Record<string, unknown>, priority = 0): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    getWorker().postMessage({ id, type, payload });
+    queue.push({ type, payload, priority, resolve: resolve as (v: unknown) => void, reject });
+    dispatchNext();
   });
 }
 
 export async function initEmbedder(modelPath?: string): Promise<{ vectorSize: number }> {
-  return send<{ vectorSize: number }>("loadModel", { modelPath });
+  return send<{ vectorSize: number }>("loadModel", { modelPath }, 10);
 }
 
-export async function embed(texts: string[]): Promise<number[][]> {
-  return send<number[][]>("embed", { texts });
+/** priority: higher runs first among requests still waiting in the queue (default 0). */
+export async function embed(texts: string[], priority = 0): Promise<number[][]> {
+  return send<number[][]>("embed", { texts }, priority);
 }
 
 export function cosine(a: number[], b: number[]): number {
@@ -67,4 +101,3 @@ export function cosine(a: number[], b: number[]): number {
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
   return dot;
 }
-

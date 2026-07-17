@@ -73,7 +73,9 @@ function segmentNote(text: string): Array<{ text: string; headingPath: string }>
 async function embedSentences(units: Array<{ text: string; headingPath: string }>): Promise<SentenceUnit[]> {
   const uncached = units.filter(u => !sentenceEmbCache.has(u.text));
   if (uncached.length > 0) {
-    const embeddings = await embed(uncached.map(u => u.text));
+    // High priority: this feeds the Smart Suggestions sidebar directly, so it
+    // shouldn't queue behind background wikilink-candidate scanning.
+    const embeddings = await embed(uncached.map(u => u.text), 10);
     for (let i = 0; i < uncached.length; i++) {
       sentenceEmbCache.set(uncached[i].text, embeddings[i]);
     }

@@ -112,6 +112,14 @@ class MockCacheManager implements Partial<CacheManager> {
     return results.slice(0, k);
   }
 
+  async queryByEmbeddings(
+    embeddings: number[][],
+    k: number,
+    excludePath?: string
+  ): Promise<Array<Array<{ path: string; score: number; preview: string }>>> {
+    return Promise.all(embeddings.map((emb) => this.queryByEmbedding(emb, k, excludePath)));
+  }
+
   async clear(): Promise<void> {
     this.notes.clear();
   }
@@ -481,5 +489,41 @@ describe("VaultIndex — searchByEmbedding", () => {
     const index = makeIndex(undefined, cache as any);
     const results = await index.searchByEmbedding([1, 0], 5);
     expect(results).toEqual([]);
+  });
+});
+
+describe("VaultIndex — searchByEmbeddings", () => {
+  it("scores each query embedding independently in one call", async () => {
+    const paths = ["a.md", "b.md", "c.md"];
+    const cache = new MockCacheManager();
+    const index = makeIndex(makeApp(paths), cache as any);
+
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([0, 1]));
+    await (cache as any).updateNote("c.md", 1000, makeChunks([0.5, 0.5]));
+
+    const [resultsForA, resultsForB] = await index.searchByEmbeddings([[1, 0], [0, 1]], 1);
+    expect(resultsForA[0].file.path).toBe("a.md");
+    expect(resultsForB[0].file.path).toBe("b.md");
+  });
+
+  it("matches searchByEmbedding for a single query", async () => {
+    const paths = ["a.md", "b.md"];
+    const cache = new MockCacheManager();
+    const index = makeIndex(makeApp(paths), cache as any);
+
+    await (cache as any).updateNote("a.md", 1000, makeChunks([1, 0]));
+    await (cache as any).updateNote("b.md", 1000, makeChunks([0.5, 0.5]));
+
+    const single = await index.searchByEmbedding([1, 0], 5, "b.md");
+    const [batched] = await index.searchByEmbeddings([[1, 0]], 5, "b.md");
+    expect(batched.map((r) => r.file.path)).toEqual(single.map((r) => r.file.path));
+  });
+
+  it("returns an empty array per query when the index is empty", async () => {
+    const cache = new MockCacheManager();
+    const index = makeIndex(undefined, cache as any);
+    const results = await index.searchByEmbeddings([[1, 0], [0, 1]], 5);
+    expect(results).toEqual([[], []]);
   });
 });

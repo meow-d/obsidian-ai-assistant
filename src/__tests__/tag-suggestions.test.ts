@@ -105,4 +105,32 @@ describe("computeTagSuggestions", () => {
     await computeTagSuggestions(makeApp(), index, makeMockFile("a.md"), 7);
     expect(vi.mocked(index.searchByEmbedding)).toHaveBeenCalledWith(expect.anything(), 7, "a.md");
   });
+
+  it("picks up tags defined only in frontmatter, not just inline #tags", async () => {
+    const index = makeIndex([makeResult("b.md", 0.9)]);
+    const app: App = {
+      metadataCache: {
+        getFileCache: (file: TFile) => {
+          if (file.path === "b.md") return { frontmatter: { tags: ["pkm"] } };
+          return {};
+        },
+      },
+    } as unknown as App;
+    const suggestions = await computeTagSuggestions(app, index, makeMockFile("a.md"));
+    expect(suggestions.map((s) => s.tag)).toContain("pkm");
+  });
+
+  it("excludes a frontmatter-only tag already on the current file", async () => {
+    const index = makeIndex([makeResult("b.md", 0.9)]);
+    const app: App = {
+      metadataCache: {
+        getFileCache: (file: TFile) => {
+          if (file.path === "a.md") return { frontmatter: { tags: ["pkm"] } };
+          return { frontmatter: { tags: ["pkm"] } };
+        },
+      },
+    } as unknown as App;
+    const suggestions = await computeTagSuggestions(app, index, makeMockFile("a.md"));
+    expect(suggestions.map((s) => s.tag)).not.toContain("pkm");
+  });
 });

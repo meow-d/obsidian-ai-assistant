@@ -153,6 +153,32 @@ describe("computeFolderSuggestions", () => {
     expect(suggestions).toEqual([]);
   });
 
+  it("filters out weak matches around 0.14-0.17 that used to pass the old 0.1 floor", async () => {
+    const folder = makeFolder("weak", ["n1.md", "n2.md", "n3.md", "n4.md"]);
+    const result: SearchResult = {
+      file: Object.assign(makeMockFile("weak/a.md"), { parent: folder }) as never,
+      score: 0.3, // score/sqrt(4) = 0.15
+      preview: "",
+    };
+    const index = makeIndex([result]);
+    const app = makeApp({ weak: folder });
+    const suggestions = await computeFolderSuggestions(app, index, makeMockFile("other/note.md"));
+    expect(suggestions).toEqual([]);
+  });
+
+  it("keeps matches at or above the current 0.3 floor", async () => {
+    const folder = makeFolder("strong", ["n1.md", "n2.md", "n3.md", "n4.md"]);
+    const result: SearchResult = {
+      file: Object.assign(makeMockFile("strong/a.md"), { parent: folder }) as never,
+      score: 0.6, // score/sqrt(4) = 0.3
+      preview: "",
+    };
+    const index = makeIndex([result]);
+    const app = makeApp({ strong: folder });
+    const suggestions = await computeFolderSuggestions(app, index, makeMockFile("other/note.md"));
+    expect(suggestions.map((s) => s.folder.path)).toContain("strong");
+  });
+
   it("skips folders that vault cannot resolve", async () => {
     const folder = makeFolder("orphan", ["n1.md", "n2.md", "n3.md", "n4.md"]);
     const result: SearchResult = {

@@ -73,8 +73,8 @@ export class FypSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h3", { text: "Advanced" });
 
-    new Setting(containerEl).setName("Custom embedding model path").setDesc("Path to local ONNX model directory (leave blank to use bundled model)").addText((t) =>
-      t.setPlaceholder("e.g. /path/to/model").setValue(this.plugin.settings.modelPath).onChange(async (v) => {
+    new Setting(containerEl).setName("Custom embedding model").setDesc("Huggingface or local path to ONNX model (leave blank to use default model)").addText((t) =>
+      t.setPlaceholder("meow-d/mdbr-leaf-ir-obsidian").setValue(this.plugin.settings.modelPath).onChange(async (v) => {
         this.plugin.settings.modelPath = v;
         await this.plugin.saveSettings();
       })

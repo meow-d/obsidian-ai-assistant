@@ -111,7 +111,7 @@ export class SimilarNotesView extends ItemView {
 
     if (activeFile.path !== this.lastPath) {
       this.lastPath = activeFile.path;
-      render(() => renderLoadingPanel(container, "Digging up suggestions…"));
+      render(() => renderLoadingPanel(container, "Analyzing note for smart suggestions..."));
     }
 
     const emb = await this.index.getEmbedding(activeFile.path);

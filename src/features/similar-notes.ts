@@ -5,6 +5,7 @@ import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
 import { renderIndexingStatus } from "../ui/indexing-status";
+import { renderLoadingPanel } from "../ui/loading-panel";
 import { renderItemList } from "../ui/item-list";
 import { getDisplayTitle } from "../core/note-title";
 import { computeTagSuggestions } from "./tag-suggestions";
@@ -110,7 +111,7 @@ export class SimilarNotesView extends ItemView {
 
     if (activeFile.path !== this.lastPath) {
       this.lastPath = activeFile.path;
-      render(() => container.createEl("p", { cls: "fyp-muted", text: "Loading suggestions…" }));
+      render(() => renderLoadingPanel(container, "Digging up suggestions…"));
     }
 
     const emb = await this.index.getEmbedding(activeFile.path);

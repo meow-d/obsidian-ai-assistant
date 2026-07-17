@@ -17,10 +17,11 @@ interface SimplePage {
 /** Pages that are just static text/screenshot; page 2 (settings) is built separately. */
 const SIMPLE_PAGES: Record<number, SimplePage> = {
   1: {
-    title: "Welcome to Wikilink AI Assistant (tenative name)!",
+    title: "Welcome! Thanks for installing Kaho!",
     paragraphs: [
-      { text: "This plugin brings AI-powered knowledge management to your Obsidian vault. It uses custom fine-tuned embedding models to understand your notes and surface connections you might have missed." },
       { text: "This short guide will walk you through configuration and the main features." },
+      { text: "If you have any issues feel free to contact the developer or create a Github issue." },
+      { text: "Yes this plugin is named after a certain character sorry for my terrible naming sense." },
     ],
   },
   3: {

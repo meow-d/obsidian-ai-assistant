@@ -388,8 +388,10 @@
 .fyp-agent-textarea {
   width: 100%;
   resize: vertical;
-  min-height: 54px;
   font-size: 0.9em;
+  min-height: 54px;
+  max-height: 400px;
+  field-sizing: content;
 }
 
 /* Agent conversation history panel */

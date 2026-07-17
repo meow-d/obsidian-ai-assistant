@@ -6,6 +6,12 @@ import { log, warn, error } from "./log";
 
 const CACHE_FOLDER = ".fyp-cache";
 const DB_FILE = "embeddings.db";
+const YIELD_EVERY_ROWS = 500;
+
+/** Hands control back to the event loop so a long DB scan doesn't freeze the UI. */
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 /**
  * Collapse a note's per-chunk embeddings into a single note-level vector.
@@ -240,13 +246,13 @@ export class CacheManager {
       log(`[cache] load: meta=${JSON.stringify(meta)}`);
       metaStmt.free();
 
-      if (!meta || (meta as { value: string }).value !== modelPath) {
-        const oldPath = meta ? (meta as { value: string }).value : null;
-        log(
-          `[cache] model path changed${oldPath ? ` (was "${oldPath}", now "${modelPath}")` : ""}, clearing cache`
-        );
+      if (meta && (meta as { value: string }).value !== modelPath) {
+        log(`[cache] model path changed (was "${(meta as { value: string }).value}", now "${modelPath}"), clearing cache`);
         await this.clear();
         return null;
+      }
+      if (!hasMeta) {
+        log(`[cache] load: no modelPath recorded (pre-existing cache), trusting existing rows`);
       }
 
       log(`[cache] load: preparing embeddings query`);
@@ -289,40 +295,64 @@ export class CacheManager {
   }
 
   async queryByEmbedding(embedding: number[], k: number, excludePath?: string): Promise<Array<{ path: string; score: number; preview: string }>> {
+    const [results] = await this.queryByEmbeddings([embedding], k, excludePath);
+    return results;
+  }
+
+  /**
+   * Scores every chunk row against multiple query embeddings in a single pass
+   * over the DB, instead of one full scan per query. Used by callers that need
+   * a top-k match for many phrases/notes at once (e.g. wikilink-candidate
+   * detection), where scanning once-per-candidate would repeat the same
+   * O(chunk rows) work N times on the main thread.
+   */
+  async queryByEmbeddings(
+    embeddings: number[][],
+    k: number,
+    excludePath?: string
+  ): Promise<Array<Array<{ path: string; score: number; preview: string }>>> {
     try {
-      log(`[cache] queryByEmbedding: query embedding length=${embedding.length}, k=${k}, excludePath="${excludePath}"`);
+      log(`[cache] queryByEmbeddings: queries=${embeddings.length}, k=${k}, excludePath="${excludePath}"`);
       const db = await this.getDb();
       const stmt = db.prepare("SELECT path, embedding, preview FROM embeddings");
-      const best = new Map<string, { score: number; preview: string }>();
+      const bests = embeddings.map(() => new Map<string, { score: number; preview: string }>());
 
       let rowCount = 0;
       while (stmt.step()) {
         try {
           const row = stmt.getAsObject();
           const path = row.path as string;
-          if (path === excludePath) continue;
-          const emb = this.decodeEmbedding(row.embedding as Uint8Array);
-          const score = cosine(embedding, emb);
-          const current = best.get(path);
-          if (!current || score > current.score) {
-            best.set(path, { score, preview: row.preview as string });
+          if (path !== excludePath) {
+            const emb = this.decodeEmbedding(row.embedding as Uint8Array);
+            const preview = row.preview as string;
+            for (let i = 0; i < embeddings.length; i++) {
+              const score = cosine(embeddings[i], emb);
+              const best = bests[i];
+              const current = best.get(path);
+              if (!current || score > current.score) {
+                best.set(path, { score, preview });
+              }
+            }
           }
           rowCount++;
+          if (rowCount % YIELD_EVERY_ROWS === 0) await yieldToMainThread();
         } catch (e) {
-          error(`[cache] queryByEmbedding: failed to process row:`, e);
+          error(`[cache] queryByEmbeddings: failed to process row:`, e);
           throw e;
         }
       }
       stmt.free();
 
-      const results = Array.from(best, ([path, v]) => ({ path, score: v.score, preview: v.preview }));
-      results.sort((a, b) => b.score - a.score);
-      const topK = results.slice(0, k);
-      log(`[cache] queryByEmbedding: processed ${rowCount} chunk rows, returning top ${topK.length}`);
-      return topK;
+      const allResults = bests.map((best) => {
+        const results = Array.from(best, ([path, v]) => ({ path, score: v.score, preview: v.preview }));
+        results.sort((a, b) => b.score - a.score);
+        return results.slice(0, k);
+      });
+      log(`[cache] queryByEmbeddings: processed ${rowCount} chunk rows, returning top ${k} per query`);
+      return allResults;
     } catch (e) {
-      error("[cache] queryByEmbedding failed:", e);
-      return [];
+      error("[cache] queryByEmbeddings failed:", e);
+      return embeddings.map(() => []);
     }
   }
 

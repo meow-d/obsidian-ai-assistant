@@ -12,6 +12,7 @@ export interface FypSettings {
   minSimilarity: number;
   setupCompleted: boolean;
   showWelcomeOnStartup: boolean;
+  showNoteTitles: boolean;
 }
 
 export const DEFAULT_SETTINGS: FypSettings = {
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: FypSettings = {
   llmModel: "claude-sonnet",
   setupCompleted: false,
   showWelcomeOnStartup: true,
+  showNoteTitles: false,
 };
 
 export class FypSettingTab extends PluginSettingTab {
@@ -55,6 +57,16 @@ export class FypSettingTab extends PluginSettingTab {
       .addToggle((t) =>
         t.setValue(this.plugin.settings.enableIndexing).onChange(async (v) => {
           this.plugin.settings.enableIndexing = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Show note titles instead of filenames")
+      .setDesc("Display each note's frontmatter title (or alias, or first H1 heading) instead of its filename. Useful if you use opaque/unique filenames.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.showNoteTitles).onChange(async (v) => {
+          this.plugin.settings.showNoteTitles = v;
           await this.plugin.saveSettings();
         })
       );

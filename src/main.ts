@@ -51,7 +51,7 @@ export default class FypPlugin extends Plugin {
     });
 
     // CM6 inline wikilink candidate decorations
-    this.registerEditorExtension(createWikilinkCandidateExtension(this.app, this.index));
+    this.registerEditorExtension(createWikilinkCandidateExtension(this.app, this.index, () => this.settings.showNoteTitles));
 
     // Commands
     this.addCommand({
@@ -86,7 +86,7 @@ export default class FypPlugin extends Plugin {
     this.addCommand({
       id: "scan-vault-wikilink-candidates",
       name: "Scan vault for wikilink suggestions",
-      callback: () => scanVaultWikilinks(this.app, this.index),
+      callback: () => scanVaultWikilinks(this.app, this.index, this.settings.showNoteTitles),
     });
 
     // DEV: comment out before shipping

@@ -2,6 +2,7 @@ import { App, Modal, Notice, TFile } from "obsidian";
 import { extractCandidates, getLinkedPhrases } from "../core/nlp";
 import { embed } from "../core/embedder";
 import type { VaultIndex } from "../core/vault-index";
+import { getDisplayTitle } from "../core/note-title";
 
 const MIN_SCORE = 0.45;
 
@@ -9,10 +10,12 @@ type VaultSuggestion = { sourceFile: TFile; phrase: string; targetFile: TFile; s
 
 class VaultWikilinkModal extends Modal {
   private suggestions: VaultSuggestion[];
+  private showNoteTitles: boolean;
 
-  constructor(app: App, suggestions: VaultSuggestion[]) {
+  constructor(app: App, suggestions: VaultSuggestion[], showNoteTitles: boolean) {
     super(app);
     this.suggestions = suggestions;
+    this.showNoteTitles = showNoteTitles;
   }
 
   onOpen(): void {
@@ -31,12 +34,12 @@ class VaultWikilinkModal extends Modal {
 
     for (const [, group] of bySource) {
       const section = contentEl.createEl("div", { cls: "fyp-orphan-section" });
-      section.createEl("strong", { text: group[0].sourceFile.basename });
+      section.createEl("strong", { text: getDisplayTitle(this.app, group[0].sourceFile, this.showNoteTitles) });
 
       for (const s of group) {
         const row = section.createEl("div", { cls: "fyp-orphan-row" });
         row.createEl("code", { text: s.phrase });
-        row.createEl("span", { text: `link to [[${s.targetFile.basename}]]`, cls: "fyp-similar-score" });
+        row.createEl("span", { text: `link to [[${getDisplayTitle(this.app, s.targetFile, this.showNoteTitles)}]]`, cls: "fyp-similar-score" });
         row.createEl("span", { text: s.score.toFixed(2), cls: "fyp-similar-score" });
 
         const btn = row.createEl("button", { text: "Insert link" });
@@ -62,7 +65,7 @@ class VaultWikilinkModal extends Modal {
   onClose(): void { this.contentEl.empty(); }
 }
 
-export async function scanVaultWikilinks(app: App, index: VaultIndex): Promise<void> {
+export async function scanVaultWikilinks(app: App, index: VaultIndex, showNoteTitles: boolean): Promise<void> {
   const files = app.vault.getMarkdownFiles();
   const progressNotice = new Notice(`Scanning vault… 0 / ${files.length}`, 0);
   const suggestions: VaultSuggestion[] = [];
@@ -78,8 +81,9 @@ export async function scanVaultWikilinks(app: App, index: VaultIndex): Promise<v
       if (unlinked.length === 0) continue;
 
       const embeddings = await embed(unlinked);
+      const allResults = await index.searchByEmbeddings(embeddings, 1, file.path);
       for (let j = 0; j < unlinked.length; j++) {
-        const results = await index.searchByEmbedding(embeddings[j], 1, file.path);
+        const results = allResults[j];
         if (results.length > 0 && results[0].score >= MIN_SCORE) {
           suggestions.push({ sourceFile: file, phrase: unlinked[j], targetFile: results[0].file, score: results[0].score });
         }
@@ -94,5 +98,5 @@ export async function scanVaultWikilinks(app: App, index: VaultIndex): Promise<v
     return;
   }
 
-  new VaultWikilinkModal(app, suggestions).open();
+  new VaultWikilinkModal(app, suggestions, showNoteTitles).open();
 }

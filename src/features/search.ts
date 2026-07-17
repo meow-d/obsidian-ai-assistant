@@ -4,6 +4,7 @@ import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
 import { renderIndexingStatus } from "../ui/indexing-status";
+import { getDisplayTitle } from "../core/note-title";
 
 export const SEARCH_VIEW = "fyp-search";
 
@@ -12,16 +13,18 @@ const SEARCH_DEBOUNCE_MS = 300;
 export class SearchView extends ItemView {
   private index: VaultIndex;
   private topK: number;
+  private plugin: FypPlugin;
   private resultsEl!: HTMLElement;
   private results: SearchResult[] = [];
   private selectedIndex = -1;
   private searchGeneration = 0;
   private unsubscribeIndexing: (() => void) | null = null;
 
-  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, _plugin: FypPlugin) {
+  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
     this.index = index;
     this.topK = topK;
+    this.plugin = plugin;
   }
 
   getViewType(): string { return SEARCH_VIEW; }
@@ -106,7 +109,7 @@ export class SearchView extends ItemView {
       const item = this.resultsEl.createEl("div", {
         cls: "fyp-similar-item" + (i === this.selectedIndex ? " fyp-item-selected" : ""),
       });
-      item.createEl("span", { cls: "fyp-similar-title", text: r.file.basename });
+      item.createEl("span", { cls: "fyp-similar-title", text: getDisplayTitle(this.app, r.file, this.plugin.settings.showNoteTitles) });
       makeActivatable(item, () => this.app.workspace.getLeaf(false).openFile(r.file));
       item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3) });
       item.createEl("p", { cls: "fyp-similar-preview", text: r.preview.slice(0, 120) });

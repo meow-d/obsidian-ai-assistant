@@ -45,7 +45,7 @@ const PRESETS: { label: string; text: string }[] = [
   },
   {
     label: "Where should this go?",
-    text: "Based on the rest of my vault, where does my current note best fit — an existing folder, tag, or related note it should link to?",
+    text: "Based on the rest of my vault, where does my current note best fit? An existing folder, tag, or related note it should link to?",
   },
   {
     label: "Quiz me",

@@ -5,6 +5,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { extractCandidates, getLinkedPhrases } from "../core/nlp";
 import { embed } from "../core/embedder";
 import type { VaultIndex, SearchResult } from "../core/vault-index";
+import { getDisplayTitle } from "../core/note-title";
 
 const MIN_SCORE = 0.45;
 const DEBOUNCE_MS = 20_000;
@@ -47,8 +48,9 @@ async function runCandidateAnalysis(view: EditorView, app: App, index: VaultInde
   const embeddings = await embed(unlinked);
   const suggestions: CandidateSuggestion[] = [];
 
+  const allResults = await index.searchByEmbeddings(embeddings, 1, file.path);
   for (let i = 0; i < unlinked.length; i++) {
-    const results = await index.searchByEmbedding(embeddings[i], 1, file.path);
+    const results = allResults[i];
     if (results.length > 0 && results[0].score >= MIN_SCORE) {
       const idx = text.indexOf(unlinked[i]);
       if (idx !== -1) {
@@ -67,7 +69,7 @@ async function runCandidateAnalysis(view: EditorView, app: App, index: VaultInde
   view.dispatch({ effects: setCandidates.of(decos) });
 }
 
-export function createWikilinkCandidateExtension(app: App, index: VaultIndex) {
+export function createWikilinkCandidateExtension(app: App, index: VaultIndex, isNoteTitlesEnabled: () => boolean) {
   const plugin = ViewPlugin.define((view) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -102,8 +104,9 @@ export function createWikilinkCandidateExtension(app: App, index: VaultIndex) {
       if (!match) return false;
 
       const menu = new Menu();
+      const displayTitle = getDisplayTitle(app, match.result.file, isNoteTitlesEnabled());
       menu.addItem((item) =>
-        item.setTitle(`Link to [[${match.result.file.basename}]]`).onClick(() => {
+        item.setTitle(`Link to [[${displayTitle}]]`).onClick(() => {
           view.dispatch({
             changes: { from: match.from, to: match.to, insert: `[[${match.result.file.basename}|${match.phrase}]]` },
           });

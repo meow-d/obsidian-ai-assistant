@@ -4,6 +4,7 @@ import type FypPlugin from "../main";
 import { createSidebarSwitcher, SIDEBAR_VIEWS } from "../ui/sidebar-switcher";
 import { makeActivatable } from "../ui/a11y";
 import { renderIndexingStatus } from "../ui/indexing-status";
+import { getDisplayTitle } from "../core/note-title";
 
 export const ORPHAN_RESCUER_VIEW = "fyp-orphan-rescuer";
 
@@ -15,13 +16,15 @@ interface OrphanEntry {
 export class OrphanRescuerView extends ItemView {
   private index: VaultIndex;
   private topK: number;
+  private plugin: FypPlugin;
   private entries: OrphanEntry[] = [];
   private unsubscribeIndexing: (() => void) | null = null;
 
-  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, _plugin: FypPlugin) {
+  constructor(leaf: WorkspaceLeaf, index: VaultIndex, topK: number, plugin: FypPlugin) {
     super(leaf);
     this.index = index;
     this.topK = topK;
+    this.plugin = plugin;
   }
 
   getViewType(): string { return ORPHAN_RESCUER_VIEW; }
@@ -92,7 +95,7 @@ export class OrphanRescuerView extends ItemView {
 
     for (const { file, suggestions } of this.entries) {
       const section = container.createEl("div", { cls: "fyp-orphan-section" });
-      const heading = section.createEl("a", { cls: "fyp-similar-title", text: file.basename });
+      const heading = section.createEl("a", { cls: "fyp-similar-title", text: getDisplayTitle(this.app, file, this.plugin.settings.showNoteTitles) });
       makeActivatable(heading, () => {
         this.app.workspace.getLeaf(false).openFile(file);
         this.leaf.setViewState({ type: SIDEBAR_VIEWS.SIMILAR_NOTES, active: true });
@@ -106,7 +109,7 @@ export class OrphanRescuerView extends ItemView {
       const list = section.createEl("div", { cls: "fyp-orphan-suggestions" });
       for (const r of suggestions) {
         const item = list.createEl("div", { cls: "fyp-orphan-suggestion-item" });
-        const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: r.file.basename });
+        const link = item.createEl("a", { cls: "fyp-orphan-suggestion-link", text: getDisplayTitle(this.app, r.file, this.plugin.settings.showNoteTitles) });
         makeActivatable(link, () => this.app.workspace.getLeaf(false).openFile(r.file));
         item.createEl("span", { cls: "fyp-similar-score", text: r.score.toFixed(3)});
       }

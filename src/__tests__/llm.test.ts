@@ -22,6 +22,7 @@ const baseSettings: FypSettings = {
   llmModel: "test-model",
   setupCompleted: true,
   showWelcomeOnStartup: false,
+  showNoteTitles: false,
 };
 
 const noopTools = {

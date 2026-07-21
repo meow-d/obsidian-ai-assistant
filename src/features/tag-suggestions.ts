@@ -1,6 +1,8 @@
 import { App, getAllTags, Modal, Notice, TFile } from "obsidian";
 import type { VaultIndex } from "../core/vault-index";
 
+const MIN_NEIGHBOUR_SIMILARITY = 0.3;
+
 class TagSuggestModal extends Modal {
   private file: TFile;
   private ranked: Array<{ tag: string; score: number }>;
@@ -54,6 +56,7 @@ export async function computeTagSuggestions(
 
   const tagScores = new Map<string, number>();
   for (const r of similar) {
+    if (r.score < MIN_NEIGHBOUR_SIMILARITY) continue;
     const cache = app.metadataCache.getFileCache(r.file);
     if (!cache) continue;
     for (const rawTag of getAllTags(cache) ?? []) {

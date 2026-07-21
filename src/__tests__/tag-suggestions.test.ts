@@ -76,6 +76,20 @@ describe("computeTagSuggestions", () => {
     expect(pkm?.score).toBeCloseTo(0.8 + 0.6);
   });
 
+  it("ignores neighbours below the minimum similarity", async () => {
+    const index = makeIndex([makeResult("b.md", 0.15)]);
+    const app = makeApp({ "b.md": ["pkm"] });
+    const suggestions = await computeTagSuggestions(app, index, makeMockFile("a.md"));
+    expect(suggestions).toEqual([]);
+  });
+
+  it("counts only the neighbours above the minimum similarity", async () => {
+    const index = makeIndex([makeResult("b.md", 0.8), makeResult("c.md", 0.1)]);
+    const app = makeApp({ "b.md": ["pkm"], "c.md": ["pkm"] });
+    const suggestions = await computeTagSuggestions(app, index, makeMockFile("a.md"));
+    expect(suggestions.find((s) => s.tag === "pkm")?.score).toBeCloseTo(0.8);
+  });
+
   it("sorts suggestions by descending score", async () => {
     const index = makeIndex([makeResult("b.md", 0.5), makeResult("c.md", 0.9), makeResult("d.md", 0.8)]);
     const app = makeApp({ "b.md": ["rare"], "c.md": ["common"], "d.md": ["common"] });

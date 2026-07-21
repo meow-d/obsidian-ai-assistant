@@ -3,6 +3,7 @@ import type { VaultIndex } from "../core/vault-index";
 
 const NEIGHBOUR_K = 30;
 const MIN_SCORE = 0.3;
+const MIN_NEIGHBOUR_SIMILARITY = 0.3;
 
 function folderSize(folder: TFolder): number {
   let count = 0;
@@ -22,6 +23,7 @@ export async function computeFolderSuggestions(
 
   const folderWeights = new Map<string, number>();
   for (const { file: neighbour, score } of neighbours) {
+    if (score < MIN_NEIGHBOUR_SIMILARITY) continue;
     const parent = neighbour.parent;
     if (!parent || parent.path === "/" || parent.path === file.parent?.path) continue;
     folderWeights.set(parent.path, (folderWeights.get(parent.path) ?? 0) + score);

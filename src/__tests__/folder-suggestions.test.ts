@@ -140,6 +140,19 @@ describe("computeFolderSuggestions", () => {
     expect(suggestions[0].folder.path).toBe("beta");
   });
 
+  it("ignores neighbours below the minimum similarity, even in aggregate", async () => {
+    const folder = makeFolder("weak", ["n1.md", "n2.md", "n3.md", "n4.md"]);
+    const results: SearchResult[] = Array.from({ length: 5 }, (_, i) => ({
+      file: Object.assign(makeMockFile(`weak/a${i}.md`), { parent: folder }) as never,
+      score: 0.15, // 5 * 0.15 / sqrt(4) = 0.375, which used to clear the 0.3 floor
+      preview: "",
+    }));
+    const index = makeIndex(results);
+    const app = makeApp({ weak: folder });
+    const suggestions = await computeFolderSuggestions(app, index, makeMockFile("other/note.md"));
+    expect(suggestions).toEqual([]);
+  });
+
   it("filters out suggestions below the minimum score threshold", async () => {
     const folder = makeFolder("big", Array.from({ length: 10000 }, (_, i) => `n${i}.md`));
     const result: SearchResult = {

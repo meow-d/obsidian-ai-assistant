@@ -18,6 +18,14 @@ describe("cosine", () => {
     expect(cosine([0, 0, 0], [1, 0, 0])).toBe(0);
   });
 
+  it("returns 0 when the stored vector is empty", () => {
+    expect(cosine([0.6, 0.8], [])).toBe(0);
+  });
+
+  it("returns 0 when the dimensions do not match", () => {
+    expect(cosine([1, 0, 0], [1, 0])).toBe(0);
+  });
+
   it("computes dot product for normalized multi-dim vectors", () => {
     // 0.6² + 0.8² = 1 - already unit length
     const a = [0.6, 0.8];

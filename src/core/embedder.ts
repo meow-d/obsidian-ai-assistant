@@ -99,6 +99,9 @@ export async function embed(texts: string[], priority = 0): Promise<number[][]> 
 }
 
 export function cosine(a: number[], b: number[]): number {
+  // a decode failure or an unembeddable note stores an empty vector; without this
+  // the loop reads past the shorter array and every score becomes NaN
+  if (a.length === 0 || a.length !== b.length) return 0;
   let dot = 0;
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
   return dot;
